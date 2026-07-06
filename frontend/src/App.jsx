@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 function App() {
   const [apiStatus, setApiStatus] = useState('Connecting...')
@@ -15,6 +15,9 @@ function App() {
   
   const [activeTab, setActiveTab] = useState('A')
   const [result, setResult] = useState(null)
+  const [consoleLogs, setConsoleLogs] = useState([])
+  
+  const terminalEndRef = useRef(null)
 
   // Verify backend health check on load
   useEffect(() => {
@@ -34,6 +37,13 @@ function App() {
       })
   }, [])
 
+  // Auto scroll terminal to bottom when new logs are added
+  useEffect(() => {
+    if (terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [consoleLogs])
+
   const handleSourceChange = (src) => {
     if (selectedSources.includes(src)) {
       setSelectedSources(selectedSources.filter(s => s !== src))
@@ -42,21 +52,47 @@ function App() {
     }
   }
 
+  const getLogClass = (log) => {
+    if (log.includes('[SUCCESS]')) return 'success'
+    if (log.includes('[WARNING]')) return 'warning'
+    if (log.includes('[ERROR]')) return 'warning'
+    if (log.startsWith('$')) return 'command'
+    return 'info'
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!domain.trim()) return
+    const targetDomain = domain.trim()
+    if (!targetDomain) return
 
     setLoading(true)
     setError(null)
     setResult(null)
+    setConsoleLogs([])
 
+    // 1. Initialize EventSource to listen to live backend stream logs
+    const eventSource = new EventSource(`http://127.0.0.1:8000/api/logs-stream?domain=${encodeURIComponent(targetDomain)}`)
+    
+    // Add command input line as the first log entry
+    setConsoleLogs([`$ theHarvester -d ${targetDomain} -b ${selectedSources.join(',')}`])
+
+    eventSource.onmessage = (event) => {
+      setConsoleLogs(prev => [...prev, event.data])
+    }
+
+    eventSource.onerror = (err) => {
+      console.error("EventSource failed:", err)
+      eventSource.close()
+    }
+
+    // 2. Fetch the final data payload
     try {
       const response = await fetch('http://127.0.0.1:8000/api/domain-info', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ domain: domain.trim() })
+        body: JSON.stringify({ domain: targetDomain })
       })
 
       if (!response.ok) {
@@ -64,15 +100,20 @@ function App() {
         throw new Error(errData.detail || 'Failed to fetch domain configuration')
       }
 
+      // Small delay to let the log animation finish streaming cleanly
+      await new Promise(resolve => setTimeout(resolve, 8000))
+
       const data = await response.json()
       setResult(data)
-      // Pick first key from dns_records if exists
+      eventSource.close() // Clean up stream connection
+
       if (data.dns_records && Object.keys(data.dns_records).length > 0) {
         setActiveTab(Object.keys(data.dns_records)[0])
       }
     } catch (err) {
       console.error(err)
       setError(err.message || 'An unexpected error occurred')
+      eventSource.close()
     } finally {
       setLoading(false)
     }
@@ -136,7 +177,7 @@ function App() {
             </div>
 
             <button type="submit" className="btn" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Querying...' : 'Fetch Asset Config'}
+              {loading ? 'Running...' : 'Fetch Asset Config'}
             </button>
           </form>
         </section>
@@ -144,17 +185,42 @@ function App() {
         {/* Display Area */}
         <section className="results-area">
           <div className="card" style={{ flex: 1 }}>
-            {loading && (
-              <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+            
+            {/* Live Terminal Stream Window */}
+            {consoleLogs.length > 0 && (
+              <div className="terminal-window">
+                <div className="terminal-header">
+                  <div className="terminal-dots">
+                    <span className="terminal-dot red"></span>
+                    <span className="terminal-dot yellow"></span>
+                    <span className="terminal-dot green"></span>
+                  </div>
+                  <span className="terminal-title">bash - theHarvester - logstream</span>
+                  <div style={{ width: '42px' }}></div>
+                </div>
+                <div className="terminal-body">
+                  {consoleLogs.map((log, idx) => (
+                    <div key={idx} className={`terminal-line ${getLogClass(log)}`}>
+                      {log}
+                    </div>
+                  ))}
+                  {loading && <div className="terminal-line info">_</div>}
+                  <div ref={terminalEndRef} />
+                </div>
+              </div>
+            )}
+
+            {loading && !result && (
+              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
                 <div className="loader"></div>
-                <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>
-                  Gathering passive configuration records...
+                <p style={{ marginTop: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Processing passive database checks...
                 </p>
               </div>
             )}
 
             {!loading && error && (
-              <div className="status-indicator" style={{ borderColor: '#ff453a', color: '#ff453a' }}>
+              <div className="status-indicator" style={{ borderColor: '#ff453a', color: '#ff453a', marginTop: '1rem' }}>
                 {error}
               </div>
             )}
@@ -166,7 +232,7 @@ function App() {
             )}
 
             {!loading && !error && result && (
-              <>
+              <div style={{ marginTop: '1rem' }}>
                 <div style={{ marginBottom: '1.5rem' }}>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Domain: {result.domain}</h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
@@ -231,7 +297,7 @@ function App() {
                     </table>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </section>
