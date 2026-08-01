@@ -100,7 +100,7 @@ WHITELISTED_SOURCES = set(SUPPORTED_SOURCES + ["all"])
 jobs: Dict[str, Dict[str, Any]] = {}
 job_subscribers: Dict[str, List[WebSocket]] = {}
 
-SUBPROCESS_TIMEOUT_SECONDS = 300  # 5 minutes required timeout
+SUBPROCESS_TIMEOUT_SECONDS = 900  # 15 minutes required timeout
 
 
 class ScanRequest(BaseModel):
