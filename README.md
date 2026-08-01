@@ -1,14 +1,3 @@
-![theHarvester](https://github.com/laramies/theHarvester/blob/master/theHarvester-logo.webp)
-
-![TheHarvester CI](https://github.com/laramies/theHarvester/workflows/TheHarvester%20Python%20CI/badge.svg) ![TheHarvester Docker Image CI](https://github.com/laramies/theHarvester/workflows/TheHarvester%20Docker%20Image%20CI/badge.svg)
-[![Rawsec's CyberSecurity Inventory](https://inventory.raw.pm/img/badges/Rawsec-inventoried-FF5050_flat_without_logo.svg)](https://inventory.raw.pm/)
-
-# theHarvester OSINT Studio — Full-Stack Browser UI
-
-theHarvester now includes a **modern, full-stack browser web interface** (`theHarvester OSINT Studio`) designed for local/private reconnaissance operations without requiring login or authentication.
-
----
-
 ## How to Run the Project
 
 ### Prerequisites
@@ -347,23 +336,3 @@ Documentation to setup API keys can be found at - https://github.com/laramies/th
 * whoisxml - 2k queries $50, 5k queries $105
 * windvane - 100 free queries
 * zoomeye - 5 free results/day. 30/results/day $190/yr
-
-
-Comments, bugs, and requests
-----------------------------
-* [![Twitter Follow](https://img.shields.io/twitter/follow/laramies.svg?style=social&label=Follow)](https://twitter.com/laramies) Christian Martorella @laramies
-  cmartorella@edge-security.com
-* [![Twitter Follow](https://img.shields.io/twitter/follow/NotoriousRebel1.svg?style=social&label=Follow)](https://twitter.com/NotoriousRebel1) Matthew Brown @NotoriousRebel1
-* [![Twitter Follow](https://img.shields.io/twitter/follow/jay_townsend1.svg?style=social&label=Follow)](https://twitter.com/jay_townsend1) Jay "L1ghtn1ng" Townsend @jay_townsend1
-
-Main contributors
------------------
-* [![Twitter Follow](https://img.shields.io/twitter/follow/NotoriousRebel1.svg?style=social&label=Follow)](https://twitter.com/NotoriousRebel1) Matthew Brown @NotoriousRebel1
-* [![Twitter Follow](https://img.shields.io/twitter/follow/jay_townsend1.svg?style=social&label=Follow)](https://twitter.com/jay_townsend1) Jay "L1ghtn1ng" Townsend @jay_townsend1
-* [![Twitter Follow](https://img.shields.io/twitter/follow/discoverscripts.svg?style=social&label=Follow)](https://twitter.com/discoverscripts) Lee Baird @discoverscripts
-
-
-Thanks
-------
-* John Matherly - Shodan project
-* Ahmed Aboul Ela - subdomain names dictionaries (big and small)
