@@ -1,313 +1,752 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react';
+
+const FALLBACK_SUPPORTED_SOURCES = [
+  'baidu', 'bevigil', 'bitbucket', 'brave', 'bufferoverun', 'builtwith', 'censys',
+  'certspotter', 'chaos', 'commoncrawl', 'criminalip', 'crtsh', 'dehashed', 'dnsdumpster',
+  'duckduckgo', 'dymo', 'fofa', 'fullhunt', 'github-code', 'gitlab', 'hackertarget',
+  'haveibeenpwned', 'hudsonrock', 'hunter', 'hunterhow', 'intelx', 'leakix', 'leaklookup',
+  'linkedin', 'linkedin_links', 'mojeek', 'netcraft', 'netlas', 'omnisint', 'onyphe',
+  'otx', 'pentesttools', 'projectdiscovery', 'rapiddns', 'robtex', 'rocketreach',
+  'securityscorecard', 'securityTrails', 'sherlockeye', 'shodan', 'shodanInternetDB',
+  'subdomaincenter', 'subdomainfinderc99', 'sublist3r', 'thc', 'threatcrowd', 'tomba',
+  'urlscan', 'venacus', 'virustotal', 'waybackarchive', 'whoisxml', 'windvane', 'yahoo',
+  'zoomeye', 'zoomeyeapi', 'anubis', 'bing', 'threatminer'
+];
+
+const RECOMMENDED_PRESET = [
+  'crtsh', 'dnsdumpster', 'duckduckgo', 'hackertarget', 'otx', 'urlscan', 'rapiddns', 'bevigil', 'brave'
+];
 
 function App() {
-  const [apiStatus, setApiStatus] = useState('Connecting...')
-  const [apiOnline, setApiOnline] = useState(false)
-  const [domain, setDomain] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  
-  // Available passive sources
-  const passiveSources = [
-    'crt.sh', 'duckduckgo', 'subdomaincenter', 'hackertarget', 'rapiddns', 'dnsdumpster'
-  ]
-  const [selectedSources, setSelectedSources] = useState(['crt.sh', 'dnsdumpster'])
-  
-  const [activeTab, setActiveTab] = useState('A')
-  const [result, setResult] = useState(null)
-  const [consoleLogs, setConsoleLogs] = useState([])
-  
-  const terminalEndRef = useRef(null)
+  // Backend connection state
+  const [apiOnline, setApiOnline] = useState(false);
+  const [apiStatusText, setApiStatusText] = useState('Checking API...');
 
-  // Verify backend health check on load
+  // Form input state
+  const [domain, setDomain] = useState('');
+  const [domainError, setDomainError] = useState('');
+  const [limit, setLimit] = useState(500);
+  const [dnsBrute, setDnsBrute] = useState(false);
+  const [selectedSources, setSelectedSources] = useState(RECOMMENDED_PRESET);
+  const [availableSources, setAvailableSources] = useState(FALLBACK_SUPPORTED_SOURCES);
+  const [sourceSearch, setSourceSearch] = useState('');
+  const [activePreset, setActivePreset] = useState('recommended');
+
+  // Job execution & terminal state
+  const [currentJobId, setCurrentJobId] = useState(null);
+  const [currentCommand, setCurrentCommand] = useState('$ theHarvester -h');
+  const [currentStatus, setCurrentStatus] = useState('Idle'); // Idle | Queued | Running | Finished | Error
+  const [exitCode, setExitCode] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [consoleLogs, setConsoleLogs] = useState([
+    '# Welcome to theHarvester OSINT Studio.',
+    '# Enter a target domain and select your passive intelligence sources on the left.',
+    '# Live reconnaissance output will stream directly into this console.'
+  ]);
+
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
+  const terminalBodyRef = useRef(null);
+  const wsRef = useRef(null);
+
+  // History state
+  const [activeTab, setActiveTab] = useState('terminal'); // terminal | history
+  const [recentJobs, setRecentJobs] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Determine API base URL dynamically or fallback to localhost:8000
+  const getApiHost = () => {
+    const host = window.location.hostname;
+    return host && host !== 'localhost' ? host : '127.0.0.1';
+  };
+  const API_BASE = `http://${getApiHost()}:8000`;
+  const WS_BASE = `ws://${getApiHost()}:8000`;
+
+  // Check health and fetch sources on mount
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/health')
-      .then(res => {
-        if (!res.ok) throw new Error('API server returned error')
-        return res.json()
-      })
-      .then(() => {
-        setApiStatus('API Online')
-        setApiOnline(true)
-      })
-      .catch(err => {
-        console.error(err)
-        setApiStatus('API Offline')
-        setApiOnline(false)
-      })
-  }, [])
+    checkHealthAndSources();
+    const interval = setInterval(checkHealthAndSources, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Auto scroll terminal to bottom when new logs are added
-  useEffect(() => {
-    if (terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [consoleLogs])
-
-  const handleSourceChange = (src) => {
-    if (selectedSources.includes(src)) {
-      setSelectedSources(selectedSources.filter(s => s !== src))
-    } else {
-      setSelectedSources([...selectedSources, src])
-    }
-  }
-
-  const getLogClass = (log) => {
-    if (log.includes('[SUCCESS]')) return 'success'
-    if (log.includes('[WARNING]')) return 'warning'
-    if (log.includes('[ERROR]')) return 'warning'
-    if (log.startsWith('$')) return 'command'
-    return 'info'
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    const targetDomain = domain.trim()
-    if (!targetDomain) return
-
-    setLoading(true)
-    setError(null)
-    setResult(null)
-    setConsoleLogs([])
-
-    // 1. Initialize EventSource to listen to live backend stream logs
-    const eventSource = new EventSource(`http://127.0.0.1:8000/api/logs-stream?domain=${encodeURIComponent(targetDomain)}`)
-    
-    // Add command input line as the first log entry
-    setConsoleLogs([`$ theHarvester -d ${targetDomain} -b ${selectedSources.join(',')}`])
-
-    eventSource.onmessage = (event) => {
-      setConsoleLogs(prev => [...prev, event.data])
-    }
-
-    eventSource.onerror = (err) => {
-      console.error("EventSource failed:", err)
-      eventSource.close()
-    }
-
-    // 2. Fetch the final data payload
+  const checkHealthAndSources = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/domain-info', {
+      const res = await fetch(`${API_BASE}/api/health`);
+      if (res.ok) {
+        setApiOnline(true);
+        setApiStatusText('API Online');
+      } else {
+        setApiOnline(false);
+        setApiStatusText('API Error');
+      }
+    } catch {
+      setApiOnline(false);
+      setApiStatusText('API Offline');
+    }
+
+    try {
+      const srcRes = await fetch(`${API_BASE}/api/sources`);
+      if (srcRes.ok) {
+        const data = await srcRes.json();
+        if (data && data.sources) {
+          setAvailableSources(data.sources);
+        }
+      }
+    } catch {
+      // Use fallback already set
+    }
+  };
+
+  const fetchRecentJobs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/jobs`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.jobs) {
+          setRecentJobs(data.jobs);
+        }
+      }
+    } catch {
+      // Ignore errors when listing jobs
+    }
+  };
+
+  // Handle Terminal Auto-scroll with Pause-on-Scroll-Up behavior
+  const handleTerminalScroll = () => {
+    if (!terminalBodyRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = terminalBodyRef.current;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    if (distanceToBottom > 45) {
+      if (isAutoScrollEnabled) setIsAutoScrollEnabled(false);
+    } else {
+      if (!isAutoScrollEnabled) setIsAutoScrollEnabled(true);
+    }
+  };
+
+  useEffect(() => {
+    if (isAutoScrollEnabled && terminalBodyRef.current) {
+      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
+    }
+  }, [consoleLogs, isAutoScrollEnabled]);
+
+  // Domain Regex validation
+  const validateDomain = (val) => {
+    const trimmed = val.trim().toLowerCase();
+    const domainRegex = /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!trimmed) {
+      return 'Domain is required.';
+    }
+    if (!domainRegex.test(trimmed)) {
+      return 'Invalid domain format (e.g. example.com). No spaces or symbols allowed.';
+    }
+    return '';
+  };
+
+  const handleDomainChange = (e) => {
+    const val = e.target.value;
+    setDomain(val);
+    if (val) {
+      setDomainError(validateDomain(val));
+    } else {
+      setDomainError('');
+    }
+  };
+
+  // Toggle single source checkbox
+  const handleSourceToggle = (src) => {
+    setActivePreset('custom');
+    if (src === 'all') {
+      if (selectedSources.includes('all')) {
+        setSelectedSources(RECOMMENDED_PRESET);
+        setActivePreset('recommended');
+      } else {
+        setSelectedSources(['all']);
+        setActivePreset('all');
+      }
+      return;
+    }
+
+    let nextSources;
+    if (selectedSources.includes('all')) {
+      nextSources = [src];
+    } else if (selectedSources.includes(src)) {
+      nextSources = selectedSources.filter(s => s !== src);
+    } else {
+      nextSources = [...selectedSources, src];
+    }
+    setSelectedSources(nextSources);
+  };
+
+  const applyPreset = (presetType) => {
+    setActivePreset(presetType);
+    if (presetType === 'recommended') {
+      setSelectedSources(RECOMMENDED_PRESET);
+    } else if (presetType === 'all') {
+      setSelectedSources(['all']);
+    } else if (presetType === 'clear') {
+      setSelectedSources([]);
+    }
+  };
+
+  // Connect to WebSocket to stream live output
+  const connectWebSocket = (jobId) => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    const wsUrl = `${WS_BASE}/api/scan/${jobId}/stream`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      // Connected successfully
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'command') {
+          setCurrentCommand(payload.data);
+        } else if (payload.type === 'status') {
+          setCurrentStatus(payload.status);
+        } else if (payload.type === 'output') {
+          setConsoleLogs(prev => [...prev, payload.data]);
+        } else if (payload.type === 'done') {
+          setCurrentStatus(payload.status);
+          setExitCode(payload.exit_code);
+          setErrorMessage(payload.error_message);
+          setIsSubmitting(false);
+          fetchRecentJobs();
+        }
+      } catch {
+        // If raw string
+        setConsoleLogs(prev => [...prev, event.data]);
+      }
+    };
+
+    ws.onerror = () => {
+      setConsoleLogs(prev => [...prev, '[ERROR] WebSocket connection error. Attempting to check job status via REST API...']);
+      setIsSubmitting(false);
+    };
+
+    ws.onclose = () => {
+      // Closed connection
+    };
+  };
+
+  // Submit scan job
+  const handleStartScan = async (e) => {
+    e.preventDefault();
+    const err = validateDomain(domain);
+    if (err) {
+      setDomainError(err);
+      return;
+    }
+    if (!selectedSources || selectedSources.length === 0) {
+      alert('Please select at least one data source.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setCurrentStatus('Queued');
+    setExitCode(null);
+    setErrorMessage(null);
+    setActiveTab('terminal');
+    setIsAutoScrollEnabled(true);
+    setConsoleLogs([
+      `# Initializing recon scan for domain: ${domain.trim()}`,
+      `# Selected sources: ${selectedSources.join(', ')}`,
+      `# Limit: ${limit} | DNS Brute: ${dnsBrute ? 'Enabled (-c)' : 'Disabled'}`,
+      `# Connecting to backend executor...`
+    ]);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/scan`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ domain: targetDomain })
-      })
+        body: JSON.stringify({
+          domain: domain.trim(),
+          sources: selectedSources,
+          limit: Number(limit),
+          dns_brute: Boolean(dnsBrute)
+        })
+      });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}))
-        throw new Error(errData.detail || 'Failed to fetch domain configuration')
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server error (${response.status})`);
       }
 
-      // Small delay to let the log animation finish streaming cleanly
-      await new Promise(resolve => setTimeout(resolve, 8000))
-
-      const data = await response.json()
-      setResult(data)
-      eventSource.close() // Clean up stream connection
-
-      if (data.dns_records && Object.keys(data.dns_records).length > 0) {
-        setActiveTab(Object.keys(data.dns_records)[0])
+      const data = await response.json();
+      setCurrentJobId(data.job_id);
+      if (data.command_str) {
+        setCurrentCommand(data.command_str);
       }
-    } catch (err) {
-      console.error(err)
-      setError(err.message || 'An unexpected error occurred')
-      eventSource.close()
-    } finally {
-      setLoading(false)
+
+      // Connect to WebSocket stream immediately
+      setConsoleLogs([]); // Clear initialization messages to show pure command & stream
+      connectWebSocket(data.job_id);
+
+    } catch (error) {
+      setCurrentStatus('Error');
+      setErrorMessage(error.message || 'Failed to trigger scan job.');
+      setConsoleLogs(prev => [...prev, `[ERROR] ${error.message}`]);
+      setIsSubmitting(false);
     }
-  }
+  };
+
+  // View historical job details
+  const handleSelectRecentJob = async (job) => {
+    setCurrentJobId(job.job_id);
+    setDomain(job.domain);
+    setSelectedSources(job.sources);
+    setLimit(job.limit);
+    setDnsBrute(job.dns_brute);
+    setCurrentCommand(job.command_str || `theHarvester -d ${job.domain}`);
+    setCurrentStatus(job.status);
+    setExitCode(job.exit_code);
+    setErrorMessage(null);
+    setActiveTab('terminal');
+    setIsAutoScrollEnabled(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/scan/${job.job_id}/result`);
+      if (res.ok) {
+        const data = await res.json();
+        setConsoleLogs(data.output_lines || []);
+        if (data.status === 'Running') {
+          connectWebSocket(job.job_id);
+        }
+      }
+    } catch {
+      setConsoleLogs([`[ERROR] Could not load results for Job ${job.job_id}`]);
+    }
+  };
+
+  // Download Output .txt file
+  const handleDownloadOutput = async () => {
+    if (!currentJobId) {
+      // Fallback blob download if no jobId yet
+      const blob = new Blob([consoleLogs.join('\n')], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `theHarvester_${domain || 'recon'}_output.txt`;
+      link.click();
+      return;
+    }
+
+    // Use clean backend attachment endpoint
+    window.open(`${API_BASE}/api/scan/${currentJobId}/download`, '_blank');
+  };
+
+  // Copy command string to clipboard
+  const handleCopyCommand = () => {
+    navigator.clipboard.writeText(currentCommand);
+    alert('Command copied to clipboard!');
+  };
+
+  // Filter sources for display
+  const filteredSources = availableSources.filter(s =>
+    s.toLowerCase().includes(sourceSearch.toLowerCase())
+  );
+
+  // Helper for terminal log coloring
+  const getLogClass = (line) => {
+    if (line.includes('[SUCCESS]') || line.includes('[+]') || line.includes('Found ')) return 'line-success';
+    if (line.includes('[ERROR]') || line.includes('[-]')) return 'line-error';
+    if (line.includes('[WARNING]') || line.includes('[!]')) return 'line-warning';
+    if (line.includes('[STDERR]')) return 'line-stderr';
+    if (line.startsWith('$') || line.startsWith('theHarvester')) return 'line-command';
+    if (line.includes('[*]') || line.includes('[INFO]')) return 'line-info';
+    return '';
+  };
 
   return (
-    <div className="dashboard-container">
-      <header>
-        <div className="logo-container">
-          <img src="https://raw.githubusercontent.com/laramies/theHarvester/master/theHarvester-logo.webp" alt="theHarvester Logo" />
-          <h1>Passive Asset Monitoring</h1>
+    <div className="app-wrapper">
+      {/* Top Header */}
+      <header className="top-header">
+        <div className="brand">
+          <div className="brand-icon">OSI</div>
+          <div className="brand-text">
+            <h1>OSINT Studio</h1>
+            <p>Passive Reconnaissance & Domain Intelligence Console</p>
+          </div>
         </div>
-        <div>
-          <span 
-            className="status-indicator" 
-            style={{
-              padding: '0.5rem 1rem', 
-              borderRadius: '8px',
-              backgroundColor: apiOnline ? 'rgba(48, 209, 88, 0.15)' : 'rgba(255, 69, 58, 0.15)',
-              color: apiOnline ? '#30d158' : '#ff453a',
-              border: 'none'
-            }}
-          >
-            {apiStatus}
-          </span>
+        <div className="header-status">
+          <div className={`status-pill ${apiOnline ? 'online' : 'offline'}`}>
+            <span className="pulse-dot"></span>
+            <span>{apiStatusText}</span>
+          </div>
         </div>
       </header>
 
-      <main>
-        {/* Sidebar */}
-        <section className="card">
-          <div className="card-title">Asset Setup</div>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group" style={{ marginBottom: '1rem' }}>
-              <label htmlFor="domain-input">Target Domain</label>
-              <input 
-                type="text" 
-                id="domain-input" 
-                placeholder="example.com" 
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                required 
-              />
+      {/* Main Container */}
+      <main className="main-container">
+        {/* Left Column: Form Setup */}
+        <section className="glass-card form-section">
+          <div className="card-heading">
+            <h2>Recon Configuration</h2>
+          </div>
+
+          <form onSubmit={handleStartScan} className="form-section">
+            {/* Target Domain Input */}
+            <div className="field-group">
+              <label className="field-label">
+                <span>Target Domain</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Strict Validated</span>
+              </label>
+              <div className="input-with-icon">
+                <span className="input-icon"></span>
+                <input
+                  type="text"
+                  className={`text-input ${domainError ? 'input-error' : ''}`}
+                  placeholder="example.com"
+                  value={domain}
+                  onChange={handleDomainChange}
+                  required
+                />
+              </div>
+              {domainError && <div className="error-hint">{domainError}</div>}
             </div>
 
-            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-              <label>Passive API Sources</label>
-              <div className="sources-list">
-                {passiveSources.map(src => (
-                  <label key={src} className="source-item">
-                    <input 
-                      type="checkbox" 
-                      value={src} 
-                      checked={selectedSources.includes(src)}
-                      onChange={() => handleSourceChange(src)}
-                    />
-                    <span>{src}</span>
-                  </label>
-                ))}
+            {/* Limit Input & DNS Brute Checkbox */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="field-group">
+                <label className="field-label"><span>Result Limit (-l)</span></label>
+                <input
+                  type="number"
+                  className="number-input"
+                  min="1"
+                  max="5000"
+                  step="1"
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  required
+                />
+              </div>
+
+              <div className="field-group" style={{ justifyContent: 'flex-end' }}>
+                <div
+                  className={`checkbox-card ${dnsBrute ? 'active' : ''}`}
+                  onClick={() => setDnsBrute(!dnsBrute)}
+                >
+                  <div className="checkbox-info">
+                    <h4>DNS Brute (-c)</h4>
+                    <p>Subdomain brute force</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={dnsBrute}
+                    onChange={() => setDnsBrute(!dnsBrute)}
+                    style={{ accentColor: 'var(--cyan)', width: '18px', height: '18px' }}
+                  />
+                </div>
               </div>
             </div>
 
-            <button type="submit" className="btn" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Running...' : 'Fetch Asset Config'}
+            {/* Data Sources Multi-Select Box */}
+            <div className="field-group">
+              <div className="sources-header-bar">
+                <label className="field-label">
+                  <span>Data Sources (-b)</span>
+                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                    {selectedSources.includes('all') ? 'ALL Sources' : `${selectedSources.length} Selected`}
+                  </span>
+                </label>
+                <div className="preset-buttons">
+                  <button
+                    type="button"
+                    className={`preset-btn ${activePreset === 'recommended' ? 'active' : ''}`}
+                    onClick={() => applyPreset('recommended')}
+                  >
+                    Recommended
+                  </button>
+                  <button
+                    type="button"
+                    className={`preset-btn ${activePreset === 'all' ? 'active' : ''}`}
+                    onClick={() => applyPreset('all')}
+                  >
+                    All (-b all)
+                  </button>
+                  <button
+                    type="button"
+                    className="preset-btn"
+                    onClick={() => applyPreset('clear')}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* Source Search Bar */}
+              <input
+                type="text"
+                className="sources-search-input"
+                placeholder="Filter sources (e.g. crtsh, shodan, urlscan)..."
+                value={sourceSearch}
+                onChange={(e) => setSourceSearch(e.target.value)}
+              />
+
+              {/* Sources Grid Checkboxes */}
+              <div className="sources-grid-box">
+                <label
+                  key="source-all"
+                  className={`source-checkbox-label ${selectedSources.includes('all') ? 'selected' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSources.includes('all')}
+                    onChange={() => handleSourceToggle('all')}
+                  />
+                  <span>ALL SOURCES (-b all)</span>
+                </label>
+
+                {filteredSources.map(src => {
+                  const isChecked = selectedSources.includes('all') || selectedSources.includes(src);
+                  return (
+                    <label
+                      key={src}
+                      className={`source-checkbox-label ${isChecked ? 'selected' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleSourceToggle(src)}
+                        disabled={selectedSources.includes('all')}
+                      />
+                      <span>{src}</span>
+                    </label>
+                  );
+                })}
+                {filteredSources.length === 0 && (
+                  <div style={{ padding: '10px', color: 'var(--text-dim)', fontSize: '0.8rem', gridColumn: '1 / -1' }}>
+                    No matching sources found.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="submit-btn"
+              disabled={isSubmitting || !!domainError || !domain.trim() || selectedSources.length === 0}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="spinner"></span>
+                  <span>Executing Scan Job...</span>
+                </>
+              ) : (
+                <>
+                  <span>▶ Launch Recon Scan</span>
+                </>
+              )}
             </button>
           </form>
         </section>
 
-        {/* Display Area */}
-        <section className="results-area">
-          <div className="card" style={{ flex: 1 }}>
-            
-            {/* Live Terminal Stream Window */}
-            {consoleLogs.length > 0 && (
-              <div className="terminal-window">
-                <div className="terminal-header">
-                  <div className="terminal-dots">
-                    <span className="terminal-dot red"></span>
-                    <span className="terminal-dot yellow"></span>
-                    <span className="terminal-dot green"></span>
-                  </div>
-                  <span className="terminal-title">bash - theHarvester - logstream</span>
-                  <div style={{ width: '42px' }}></div>
+        {/* Right Column: Live Output / History */}
+        <section className="content-area">
+          {/* Command Display Box */}
+          <div className="command-box-card">
+            <div className="command-content">
+              <span className="prompt-symbol">❯</span>
+              <span className="command-text" title={currentCommand}>
+                {currentCommand}
+              </span>
+            </div>
+            <button type="button" className="copy-btn" onClick={handleCopyCommand}>
+              <span>Copy</span>
+            </button>
+          </div>
+
+          {/* Status Indicators & View Toggle Bar */}
+          <div className="status-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Status:</span>
+              <span className={`status-badge ${currentStatus}`}>
+                {currentStatus === 'Running' && <span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>}
+                {currentStatus}
+                {exitCode !== null && ` (Exit: ${exitCode})`}
+              </span>
+              {errorMessage && (
+                <span style={{ fontSize: '0.82rem', color: 'var(--error)', maxWidth: '400px' }}>
+                  {errorMessage}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className={`history-toggle-btn ${activeTab === 'terminal' ? 'active' : ''}`}
+                onClick={() => setActiveTab('terminal')}
+              >
+                Live Terminal Output
+              </button>
+              <button
+                type="button"
+                className={`history-toggle-btn ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('history');
+                  fetchRecentJobs();
+                }}
+              >
+                Recent Scan Jobs
+              </button>
+              {(currentStatus === 'Finished' || currentStatus === 'Error' || consoleLogs.length > 5) && (
+                <button
+                  type="button"
+                  className="download-btn"
+                  onClick={handleDownloadOutput}
+                  title="Download .txt report"
+                >
+                  <span>Download Report (.txt)</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Terminal View */}
+          {activeTab === 'terminal' ? (
+            <div className="terminal-panel">
+              <div className="terminal-top-bar">
+                <div className="mac-buttons">
+                  <span className="mac-btn close"></span>
+                  <span className="mac-btn minimize"></span>
+                  <span className="mac-btn maximize"></span>
                 </div>
-                <div className="terminal-body">
-                  {consoleLogs.map((log, idx) => (
-                    <div key={idx} className={`terminal-line ${getLogClass(log)}`}>
-                      {log}
-                    </div>
-                  ))}
-                  {loading && <div className="terminal-line info">_</div>}
-                  <div ref={terminalEndRef} />
+                <div className="terminal-tab-title">
+                  <span>bash — theHarvester — {currentStatus}</span>
                 </div>
-              </div>
-            )}
-
-            {loading && !result && (
-              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                <div className="loader"></div>
-                <p style={{ marginTop: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Processing passive database checks...
-                </p>
-              </div>
-            )}
-
-            {!loading && error && (
-              <div className="status-indicator" style={{ borderColor: '#ff453a', color: '#ff453a', marginTop: '1rem' }}>
-                {error}
-              </div>
-            )}
-
-            {!loading && !error && !result && (
-              <div className="status-indicator">
-                Enter a domain on the left and fetch its configurations to populate the asset catalog.
-              </div>
-            )}
-
-            {!loading && !error && result && (
-              <div style={{ marginTop: '1rem' }}>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Domain: {result.domain}</h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                    Status: <span style={{ color: 'var(--success)' }}>{result.status}</span>
-                  </p>
-                </div>
-
-                <div className="tabs">
-                  {Object.keys(result.dns_records).map(type => (
-                    <button 
-                      key={type}
-                      className={`tab ${activeTab === type ? 'active' : ''}`}
-                      onClick={() => setActiveTab(type)}
-                    >
-                      {type} Records ({result.dns_records[type].length})
-                    </button>
-                  ))}
-                  <button 
-                    className={`tab ${activeTab === 'sources' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('sources')}
+                <div className="terminal-actions">
+                  <button
+                    type="button"
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer' }}
+                    onClick={() => setConsoleLogs([])}
                   >
-                    Enabled Sources ({result.passive_sources.length})
+                    Clear Console
                   </button>
                 </div>
+              </div>
 
-                {activeTab === 'sources' ? (
-                  <div className="data-table-wrapper">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Passive Resource Engine</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.passive_sources.map(src => (
-                          <tr key={src}>
-                            <td>{src}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              {/* Terminal Logs Body */}
+              <div
+                className="terminal-body"
+                ref={terminalBodyRef}
+                onScroll={handleTerminalScroll}
+              >
+                {consoleLogs.map((line, idx) => (
+                  <div key={idx} className={`log-entry ${getLogClass(line)}`}>
+                    {line}
                   </div>
-                ) : (
-                  <div className="data-table-wrapper">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Record Content</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.dns_records[activeTab]?.map((rec, idx) => (
-                          <tr key={idx}>
-                            <td style={{ fontFamily: 'monospace' }}>{rec}</td>
-                          </tr>
-                        )) || (
-                          <tr>
-                            <td style={{ color: 'var(--text-secondary)' }}>No records found.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                ))}
+                {currentStatus === 'Running' && (
+                  <div className="log-entry line-info" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                    <span className="spinner" style={{ width: '12px', height: '12px' }}></span>
+                    <span>Reconnaissance process active... waiting for stream output...</span>
                   </div>
                 )}
               </div>
-            )}
-          </div>
+
+              {/* Floating Resume Auto-Scroll Button */}
+              {!isAutoScrollEnabled && currentStatus === 'Running' && (
+                <button
+                  type="button"
+                  className="scroll-resume-toast"
+                  onClick={() => {
+                    setIsAutoScrollEnabled(true);
+                    if (terminalBodyRef.current) {
+                      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
+                    }
+                  }}
+                >
+                  <span>↓ Resume Auto-scroll</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            /* History Table View */
+            <div className="glass-card">
+              <div className="card-heading">
+                <h2>Recent Scans History</h2>
+                <button
+                  type="button"
+                  className="copy-btn"
+                  onClick={fetchRecentJobs}
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {recentJobs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>
+                  No previous scan jobs found in memory yet.
+                </div>
+              ) : (
+                <div className="history-table-container">
+                  <table className="history-table">
+                    <thead>
+                      <tr>
+                        <th>Domain</th>
+                        <th>Sources</th>
+                        <th>Limit</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentJobs.map(job => (
+                        <tr key={job.job_id} onClick={() => handleSelectRecentJob(job)}>
+                          <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>{job.domain}</td>
+                          <td>
+                            {job.sources.includes('all') ? (
+                              <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>ALL</span>
+                            ) : (
+                              `${job.sources.length} sources`
+                            )}
+                          </td>
+                          <td>{job.limit}</td>
+                          <td>
+                            <span className={`status-badge ${job.status}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.74rem' }}>
+                              {job.status}
+                            </span>
+                          </td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            {new Date(job.created_at * 1000).toLocaleTimeString()}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              View Logs ➔
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </main>
 
-      <footer>
-        <p>College Asset Security Project Dashboard | React Frontend & Python FastAPI Backend</p>
+      {/* Footer */}
+      <footer className="footer">
+        <p>theHarvester Web UI & Local OSINT Console — Built with Python FastAPI, WebSockets & React</p>
+        <p style={{ marginTop: '4px', fontSize: '0.76rem', color: '#475569' }}>
+          Security Guarantee: Strict input regex validation | Whitelisted flags | No shell=True execution | Subprocess auto-kill timeouts
+        </p>
       </footer>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

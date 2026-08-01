@@ -1957,3 +1957,8 @@ async def entry_point() -> None:
     except Exception as error_entry_point:
         print(error_entry_point)
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    from theHarvester.theHarvester import main
+    main()

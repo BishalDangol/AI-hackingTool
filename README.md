@@ -3,6 +3,151 @@
 ![TheHarvester CI](https://github.com/laramies/theHarvester/workflows/TheHarvester%20Python%20CI/badge.svg) ![TheHarvester Docker Image CI](https://github.com/laramies/theHarvester/workflows/TheHarvester%20Docker%20Image%20CI/badge.svg)
 [![Rawsec's CyberSecurity Inventory](https://inventory.raw.pm/img/badges/Rawsec-inventoried-FF5050_flat_without_logo.svg)](https://inventory.raw.pm/)
 
+# theHarvester OSINT Studio — Full-Stack Browser UI
+
+theHarvester now includes a **modern, full-stack browser web interface** (`theHarvester OSINT Studio`) designed for local/private reconnaissance operations without requiring login or authentication.
+
+---
+
+## How to Run the Project
+
+### Prerequisites
+
+Make sure the following are installed on your system before proceeding:
+
+| Requirement | Minimum Version | Notes |
+|---|---|---|
+| Python | 3.12+ | For the backend (FastAPI + uvicorn) |
+| Node.js | 18+ | For the frontend (React + Vite) |
+| npm | 9+ | Comes bundled with Node.js |
+
+---
+
+### Running the Backend
+
+The backend is a **FastAPI** server that handles scan jobs, WebSocket streaming, and REST endpoints.
+
+#### Step 1 — Create & activate a virtual environment
+
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+**Linux / macOS:**
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+#### Step 2 — Install Python dependencies
+
+```bash
+pip install -e .
+pip install fastapi uvicorn pydantic
+```
+
+> Alternatively, if you use `uv`:
+> ```bash
+> curl -LsSf https://astral.sh/uv/install.sh | sh
+> uv sync
+> ```
+
+#### Step 3 — Start the backend server
+
+```bash
+# Standard (virtualenv activated):
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Windows explicit path (no activation needed):
+.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Using uv:
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+The backend API will be available at: **`http://127.0.0.1:8000`**
+
+You can verify it is running by visiting: `http://127.0.0.1:8000/api/health`
+Expected response: `{"status": "healthy"}`
+
+---
+
+### Running the Frontend
+
+The frontend is a **React** Single-Page Application (SPA) built with **Vite**.
+
+#### Step 1 — Navigate to the frontend directory
+
+```bash
+cd frontend
+```
+
+#### Step 2 — Install Node.js dependencies
+
+```bash
+npm install
+```
+
+> This only needs to be done once (or after pulling new changes that modify `package.json`).
+
+#### Step 3 — Start the development server
+
+```bash
+npm run dev
+```
+
+The UI will be available at: **`http://localhost:5173`**
+
+Open this URL in any modern browser. The React app will automatically connect to the backend at `http://127.0.0.1:8000`.
+
+---
+
+### Running Both Together (Quick Reference)
+
+Open **two separate terminals** and run:
+
+| Terminal | Command | Serves |
+|---|---|---|
+| Terminal 1 (Backend) | `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload` | `http://127.0.0.1:8000` |
+| Terminal 2 (Frontend) | `cd frontend && npm run dev` | `http://localhost:5173` |
+
+Then open **`http://localhost:5173`** in your browser.
+
+---
+
+## Core Features & Security Guarantees
+
+### 🛡️ Ironclad Local Subprocess Security
+Even though this interface is built for local/private use without login, **strict security hardening** is enforced across all API endpoints:
+- **No `shell=True` Execution**: Commands are constructed purely as Python lists (e.g. `["theHarvester", "-d", domain, ...]`) and passed to `subprocess.Popen` / `asyncio.create_subprocess_exec(shell=False)` to completely eliminate shell injection risks.
+- **Strict Domain Validation**: Target domains are strictly checked against alphanumeric regex (`^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`) and blocked if any dangerous characters (spaces, semicolons, quotes, pipes, backticks, `$()`, `&&`) are found.
+- **Whitelisted Data Sources**: Data sources passed to `-b` (`--source`) are validated against a fixed backend whitelist (`SUPPORTED_SOURCES`). Raw user text or unverified engines are rejected at API entry.
+- **Limit Range Checks**: The `-l` (`--limit`) flag is strictly bounded between `1` and `5000`.
+- **Enforced Subprocess Timeout**: Scans enforce an automatic **5-minute (300s) timeout**. If a scan exceeds this limit, the backend cleanly terminates the child process and marks the job as timed out.
+
+### 💻 Live Monospace Terminal & UX
+- **Command Construction Display**: Shows the exact, human-readable command string (e.g. `theHarvester -d example.com -b crtsh,dnsdumpster -l 500 -c`) prior to execution.
+- **Real-Time WebSocket Stream**: Live `stdout` and `stderr` logs stream directly into an auto-scrolling terminal panel (`/api/scan/{job_id}/stream`).
+- **Pause-on-Scroll-Up Behavior**: Scrolling up inside the terminal automatically pauses auto-scroll so you can inspect historical output without interruption. A floating `[↓ Resume Auto-scroll]` button lets you instantly jump to the bottom and resume tracking.
+- **Syntax Color Coding**: Lines containing `[SUCCESS]`, `[ERROR]`, `[WARNING]`, and `[STDERR]` are color-coded for fast threat intelligence analysis.
+- **Download Output (.txt)**: Instantly download the complete reconnaissance report with full metadata once the scan finishes (`GET /api/scan/{job_id}/download`).
+
+---
+
+## 📡 REST API & WebSocket Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Health check (`{"status": "healthy"}`). |
+| `GET` | `/api/sources` | Returns whitelisted `theHarvester` engines and recommended UI presets. |
+| `POST` | `/api/scan` | Accepts JSON (`domain`, `sources`, `limit`, `dns_brute`) or form data. Strictly validates, triggers async background job, and returns `job_id`. |
+| `WS` | `/api/scan/{job_id}/stream` | Streams: `(a)` constructed command string first, `(b)` live output lines, `(c)` final status/exit code. |
+| `GET` | `/api/scan/{job_id}/result` | Returns the complete stored output, status, and exit code for any completed job. |
+| `GET` | `/api/scan/{job_id}/download` | Returns the final log report formatted as a downloadable `.txt` file. |
+
+---
 
 About
 -----
