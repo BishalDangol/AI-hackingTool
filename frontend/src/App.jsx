@@ -149,14 +149,19 @@ function App() {
   function preset(value) { setActivePreset(value); setSelectedSources(value === 'recommended' ? RECOMMENDED : value === 'all' ? ['all'] : []); }
 
   async function pollResult(jobId, attempt = 0) {
-    if (attempt >= 120) { setCurrentStatus('Error'); setErrorMessage('Result polling timed out. Check the backend terminal.'); setIsSubmitting(false); return; }
+    const maxAttempts = 900; // Match the backend’s 15-minute passive-job timeout.
+    if (attempt >= maxAttempts) { setCurrentStatus('Error'); setErrorMessage('Result polling exceeded 15 minutes. Check the backend terminal and captured job log.'); setIsSubmitting(false); return; }
     try {
-      const response = await fetch(`${API}/api/scan/${jobId}/result`);
+      const response = await fetch(`${API}/api/scan/${jobId}/result`, { cache: 'no-store' });
       if (!response.ok) throw new Error(`Result endpoint returned ${response.status}`);
       const data = await response.json();
       setConsoleLogs(data.output_lines || []); setCurrentStatus(data.status); setExitCode(data.exit_code); setErrorMessage(data.error_message || null);
       if (data.status === 'Running' || data.status === 'Queued') window.setTimeout(() => pollResult(jobId, attempt + 1), 1000); else { setIsSubmitting(false); loadJobs(); }
-    } catch (error) { setErrorMessage(error.message); setIsSubmitting(false); }
+    } catch (error) {
+      // A transient browser/backend request failure should not turn a live job into a false Error state.
+      setErrorMessage(`Temporary result connection issue: ${error.message}`);
+      window.setTimeout(() => pollResult(jobId, attempt + 1), Math.min(5000, 1000 + attempt * 100));
+    }
   }
 
   function connectStream(jobId) {

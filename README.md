@@ -1,3 +1,7 @@
+## Documentation
+
+The complete operator and user guide is available at [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md). It covers Windows/Git Bash setup, normal backend and frontend startup, module usage, scan lifecycle, results, API endpoints, troubleshooting, and bug-report capture.
+
 ## How to Run the Project
 
 ### Prerequisites
