@@ -17,6 +17,49 @@ const RECOMMENDED_PRESET = [
   'crtsh', 'dnsdumpster', 'duckduckgo', 'hackertarget', 'otx', 'urlscan', 'rapiddns', 'bevigil', 'brave'
 ];
 
+function summarizeLogs(logs) {
+  const text = logs.join('\n');
+  const countMatches = (patterns) => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
+  const sourceLines = logs.filter(line => /\[(SUCCESS|ERROR|WARNING|STDERR)\]/i.test(line));
+  const counts = {
+    emails: countMatches([/emails? found/gi, /email addresses?/gi]),
+    hosts: countMatches([/hosts? found/gi, /subdomains? found/gi, /hostnames? found/gi]),
+    ips: countMatches([/ips? found/gi, /ip addresses?/gi]),
+    urls: countMatches([/urls? found/gi, /urls? discovered/gi]),
+  };
+  return {
+    entities: Object.entries(counts).map(([label, value]) => ({ label: label.toUpperCase(), value })),
+    events: [
+      { label: 'SUCCESS', value: sourceLines.filter(line => /\[SUCCESS\]/i.test(line)).length, color: 'var(--success)' },
+      { label: 'WARNING', value: sourceLines.filter(line => /\[WARNING\]/i.test(line)).length, color: 'var(--warning)' },
+      { label: 'ERROR', value: sourceLines.filter(line => /\[(ERROR|STDERR)\]/i.test(line)).length, color: 'var(--error)' },
+    ],
+    sources: [...new Set(logs.flatMap(line => {
+      const match = line.match(/(?:source|engine)[:=]\s*([a-z0-9_-]+)/i);
+      return match ? [match[1]] : [];
+    }))].slice(0, 8),
+    totalLines: logs.length,
+  };
+}
+
+function BarChart({ items, emptyLabel = 'No captured data yet.' }) {
+  const max = Math.max(...items.map(item => item.value), 1);
+  if (!items.length || items.every(item => item.value === 0)) {
+    return <div className="chart-empty">{emptyLabel}</div>;
+  }
+  return (
+    <div className="bar-chart">
+      {items.map(item => (
+        <div className="bar-row" key={item.label}>
+          <span className="bar-label">{item.label}</span>
+          <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.max((item.value / max) * 100, item.value ? 6 : 0)}%`, background: item.color || 'linear-gradient(90deg, var(--accent), var(--cyan))' }} /></div>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   // Backend connection state
   const [apiOnline, setApiOnline] = useState(false);
@@ -348,6 +391,7 @@ function App() {
   };
 
   // Filter sources for display
+  const resultStats = summarizeLogs(consoleLogs);
   const filteredSources = availableSources.filter(s =>
     s.toLowerCase().includes(sourceSearch.toLowerCase())
   );
@@ -669,6 +713,33 @@ function App() {
                   <span>↓ Resume Auto-scroll</span>
                 </button>
               )}
+              <div className="results-dashboard">
+                <div className="results-dashboard-heading">
+                  <div>
+                    <span className="eyebrow">Captured intelligence</span>
+                    <h2>Scan result charts</h2>
+                  </div>
+                  <span className="result-line-count">{resultStats.totalLines} captured lines</span>
+                </div>
+                <div className="chart-grid">
+                  <div className="chart-card">
+                    <h3>Entity indicators</h3>
+                    <BarChart items={resultStats.entities} emptyLabel="Counts appear as providers report entities." />
+                  </div>
+                  <div className="chart-card">
+                    <h3>Event severity</h3>
+                    <BarChart items={resultStats.events} emptyLabel="No tagged events yet." />
+                  </div>
+                  <div className="chart-card chart-card-wide">
+                    <h3>Sources reported in output</h3>
+                    {resultStats.sources.length ? (
+                      <div className="source-chips">{resultStats.sources.map(source => <span key={source}>{source}</span>)}</div>
+                    ) : (
+                      <div className="chart-empty">Source labels will appear when the engine reports them.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             /* History Table View */

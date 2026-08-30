@@ -395,3 +395,47 @@ uv run pytest -q
 ```
 
 Then record the target domain, selected source names, limit, whether DNS brute force was enabled, the returned `job_id`, the `/api/scan/{job_id}/result` response, and the backend terminal log. Never include `SHODAN_API_KEY` or the contents of a populated `api-keys.yaml` in a bug report.
+
+## Windows PowerShell workflow
+
+From the repository root, create and activate the virtual environment with the Python launcher:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+Configure Shodan without writing the key into the repository:
+
+```powershell
+$env:SHODAN_API_KEY = "your-real-key"
+```
+
+Start the backend in the activated environment:
+
+```powershell
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+In a second PowerShell window, start the frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The terminal view receives each output line through the WebSocket stream. After output arrives, the **Scan result charts** panel summarizes the captured lines with entity indicators, event severity, and reported source labels. The charts are based only on actual captured output; when a provider returns no matching data, the panel displays an empty-state message rather than fabricated counts.
+
+For a reproducible Windows bug capture, use:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8000/api/diagnostics
+Invoke-RestMethod http://127.0.0.1:8000/api/sources
+python -m pytest -q
+```
+
+If PowerShell blocks script activation, run `Set-ExecutionPolicy -Scope Process Bypass` only for the current PowerShell process, then activate `.venv` again. Do not paste the value of `$env:SHODAN_API_KEY` into screenshots, logs, issues, or reports.
