@@ -368,9 +368,11 @@ function App() {
       {/* Top Header */}
       <header className="top-header">
         <div className="brand">
-          <div className="brand-icon">OSI</div>
+          <div className="brand-icon">CS</div>
           <div className="brand-text">
-            <h1>OSINT Studio</h1>
+            <h1>Cyber Shield</h1>
+
+            
             <p>Passive Reconnaissance & Domain Intelligence Console</p>
           </div>
         </div>
