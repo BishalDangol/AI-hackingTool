@@ -230,6 +230,34 @@ function App() {
     }
   };
 
+  // Poll the REST result endpoint when WebSocket support is unavailable.
+  const pollJobResult = async (jobId, attempt = 0) => {
+    if (attempt >= 120) {
+      setCurrentStatus('Error');
+      setErrorMessage('Live stream unavailable and REST polling timed out. Check the backend log.');
+      setIsSubmitting(false);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/scan/${jobId}/result`);
+      if (!response.ok) throw new Error(`Result endpoint returned ${response.status}`);
+      const data = await response.json();
+      setConsoleLogs(data.output_lines || []);
+      setCurrentStatus(data.status);
+      setExitCode(data.exit_code);
+      setErrorMessage(data.error_message || null);
+      if (data.status === 'Running' || data.status === 'Queued') {
+        window.setTimeout(() => pollJobResult(jobId, attempt + 1), 1000);
+      } else {
+        setIsSubmitting(false);
+        fetchRecentJobs();
+      }
+    } catch (error) {
+      setErrorMessage(error.message || 'Could not retrieve scan results.');
+      setIsSubmitting(false);
+    }
+  };
+
   // Connect to WebSocket to stream live output
   const connectWebSocket = (jobId) => {
     if (wsRef.current) {
@@ -239,6 +267,13 @@ function App() {
     const wsUrl = `${WS_BASE}/api/scan/${jobId}/stream`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+    let fallbackStarted = false;
+    const startFallback = () => {
+      if (fallbackStarted) return;
+      fallbackStarted = true;
+      setConsoleLogs(prev => [...prev.filter(line => !line.startsWith('[CONNECTION]')), '[CONNECTION] WebSocket unavailable; using REST result polling.']);
+      pollJobResult(jobId);
+    };
 
     ws.onopen = () => {
       // Connected successfully
@@ -267,12 +302,13 @@ function App() {
     };
 
     ws.onerror = () => {
-      setConsoleLogs(prev => [...prev, '[ERROR] WebSocket connection error. Attempting to check job status via REST API...']);
-      setIsSubmitting(false);
+      startFallback();
     };
 
     ws.onclose = () => {
-      // Closed connection
+      if (currentStatus === 'Running' || currentStatus === 'Queued') {
+        startFallback();
+      }
     };
   };
 
@@ -391,7 +427,8 @@ function App() {
   };
 
   // Filter sources for display
-  const resultStats = summarizeLogs(consoleLogs);
+  const chartLogs = consoleLogs.filter(line => !line.startsWith('[CONNECTION]'));
+  const chartStats = summarizeLogs(chartLogs);
   const filteredSources = availableSources.filter(s =>
     s.toLowerCase().includes(sourceSearch.toLowerCase())
   );
@@ -719,21 +756,21 @@ function App() {
                     <span className="eyebrow">Captured intelligence</span>
                     <h2>Scan result charts</h2>
                   </div>
-                  <span className="result-line-count">{resultStats.totalLines} captured lines</span>
+                  <span className="result-line-count">{chartStats.totalLines} captured lines</span>
                 </div>
                 <div className="chart-grid">
                   <div className="chart-card">
                     <h3>Entity indicators</h3>
-                    <BarChart items={resultStats.entities} emptyLabel="Counts appear as providers report entities." />
+                    <BarChart items={chartStats.entities} emptyLabel="Counts appear as providers report entities." />
                   </div>
                   <div className="chart-card">
                     <h3>Event severity</h3>
-                    <BarChart items={resultStats.events} emptyLabel="No tagged events yet." />
+                    <BarChart items={chartStats.events} emptyLabel="No tagged events yet." />
                   </div>
                   <div className="chart-card chart-card-wide">
                     <h3>Sources reported in output</h3>
-                    {resultStats.sources.length ? (
-                      <div className="source-chips">{resultStats.sources.map(source => <span key={source}>{source}</span>)}</div>
+                    {chartStats.sources.length ? (
+                      <div className="source-chips">{chartStats.sources.map(source => <span key={source}>{source}</span>)}</div>
                     ) : (
                       <div className="chart-empty">Source labels will appear when the engine reports them.</div>
                     )}
