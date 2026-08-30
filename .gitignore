@@ -14,6 +14,7 @@ build/
 dist/
 theHarvester.egg-info
 api-keys.yaml
+!theHarvester/data/api-keys.yaml
 .DS_Store
 .venv
 .venv/**

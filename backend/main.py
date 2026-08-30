@@ -100,7 +100,7 @@ WHITELISTED_SOURCES = set(SUPPORTED_SOURCES + ["all"])
 jobs: Dict[str, Dict[str, Any]] = {}
 job_subscribers: Dict[str, List[WebSocket]] = {}
 
-SUBPROCESS_TIMEOUT_SECONDS = 900  # 15 minutes required timeout
+SUBPROCESS_TIMEOUT_SECONDS = 900  # 15 minutes maximum runtime for a passive collection job
 
 
 class ScanRequest(BaseModel):
@@ -287,7 +287,7 @@ async def execute_job(job_id: str):
         job["status"] = "Error"
         job["exit_code"] = -9
         job["finished_at"] = time.time()
-        job["error_message"] = f"Scan exceeded {SUBPROCESS_TIMEOUT_SECONDS}s (5 minutes) timeout and was terminated."
+        job["error_message"] = f"Scan exceeded {SUBPROCESS_TIMEOUT_SECONDS}s timeout and was terminated."
         timeout_line = f"\n[ERROR] Execution timed out after {SUBPROCESS_TIMEOUT_SECONDS} seconds. Process terminated."
         job["output_lines"].append(timeout_line)
         await broadcast_event(job_id, {"type": "output", "data": timeout_line})

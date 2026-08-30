@@ -1,0 +1,78 @@
+# Copy this file to ~/.theHarvester/api-keys.yaml and replace values for providers you are authorized to use.
+# Keep real credentials out of version control.
+apikeys:
+  bevigil:
+    key: ''
+  bitbucket:
+    key: ''
+  brave:
+    key: ''
+  bufferoverun:
+    key: ''
+  builtwith:
+    key: ''
+  censys:
+    id: ''
+    secret: ''
+  criminalip:
+    key: ''
+  dehashed:
+    key: ''
+  dnsdumpster:
+    key: ''
+  dymo:
+    key: ''
+  fofa:
+    key: ''
+    email: ''
+  fullhunt:
+    key: ''
+  github:
+    key: ''
+  hackertarget:
+    key: ''
+  haveibeenpwned:
+    key: ''
+  hunter:
+    key: ''
+  hunterhow:
+    key: ''
+  intelx:
+    key: ''
+  leaklookup:
+    key: ''
+  leakix:
+    key: ''
+  mojeek:
+    key: ''
+  netlas:
+    key: ''
+  onyphe:
+    key: ''
+  pentestTools:
+    key: ''
+  projectDiscovery:
+    key: ''
+  rocketreach:
+    key: ''
+  securityscorecard:
+    key: ''
+  securityTrails:
+    key: ''
+  sherlockeye:
+    key: ''
+  shodan:
+    key: ''
+  tomba:
+    key: ''
+    secret: ''
+  venacus:
+    key: ''
+  virustotal:
+    key: ''
+  whoisxml:
+    key: ''
+  windvane:
+    key: ''
+  zoomeye:
+    key: ''

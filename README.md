@@ -267,7 +267,7 @@ Passive modules
 
 * sherlockeye: Reverse Lookup & AI-Powered OSINT (https://sherlockeye.io)
 
-* -s, --shodan: Shodan search engine will search for ports and banners from discovered hosts (https://shodan.io)
+* -s, --shodan: Shodan search engine will search for ports and banners from discovered hosts (https://shodan.io). In this project it is limited to passive metadata for domains and assets you own or are explicitly authorized to assess; it must not be used to locate, access, or view exposed CCTV cameras.
 
 * subdomaincenter: A subdomain finder tool used to find subdomains of a given domain (https://www.subdomain.center)
 
