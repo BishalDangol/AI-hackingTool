@@ -408,4 +408,3 @@ button:disabled { cursor: not-allowed; opacity: 0.55; filter: grayscale(100%); }
 .docs-last { padding-bottom: 20px; }
 .safety-callout { border-color: var(--danger); background: #fff5f5; }
 @media (max-width: 760px) { .docs-layout { grid-template-columns: 1fr; gap: 12px; padding: 8px 18px 45px; } .docs-topbar { padding: 17px 18px; } .docs-toc { position: static; grid-template-columns: repeat(2, 1fr); gap: 8px 15px; } .docs-toc h2, .docs-toc .overline { grid-column: 1 / -1; } .docs-hero { padding-top: 24px; } .docs-grid, .docs-flow { grid-template-columns: 1fr; } .docs-hero-actions { align-items: flex-start; flex-direction: column; gap: 12px; } .docs-table > div { grid-template-columns: 105px 1fr; } }
->>>>>>> 453b5e2 (add in app documentation route)
