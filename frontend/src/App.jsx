@@ -1,50 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const FALLBACK_SUPPORTED_SOURCES = [
-  'baidu', 'bevigil', 'bitbucket', 'brave', 'bufferoverun', 'builtwith', 'censys',
-  'certspotter', 'chaos', 'commoncrawl', 'criminalip', 'crtsh', 'dehashed', 'dnsdumpster',
-  'duckduckgo', 'dymo', 'fofa', 'fullhunt', 'github-code', 'gitlab', 'hackertarget',
-  'haveibeenpwned', 'hudsonrock', 'hunter', 'hunterhow', 'intelx', 'leakix', 'leaklookup',
-  'linkedin', 'linkedin_links', 'mojeek', 'netcraft', 'netlas', 'omnisint', 'onyphe',
-  'otx', 'pentesttools', 'projectdiscovery', 'rapiddns', 'robtex', 'rocketreach',
+  'anubis', 'baidu', 'bevigil', 'bing', 'bitbucket', 'brave', 'bufferoverun', 'builtwith',
+  'censys', 'certspotter', 'chaos', 'commoncrawl', 'criminalip', 'crtsh', 'dehashed',
+  'dnsdumpster', 'duckduckgo', 'dymo', 'fofa', 'fullhunt', 'github-code', 'gitlab',
+  'hackertarget', 'haveibeenpwned', 'hudsonrock', 'hunter', 'hunterhow', 'intelx', 'leakix',
+  'leaklookup', 'linkedin', 'linkedin_links', 'mojeek', 'netcraft', 'netlas', 'omnisint',
+  'onyphe', 'otx', 'pentesttools', 'projectdiscovery', 'rapiddns', 'robtex', 'rocketreach',
   'securityscorecard', 'securityTrails', 'sherlockeye', 'shodan', 'shodanInternetDB',
-  'subdomaincenter', 'subdomainfinderc99', 'sublist3r', 'thc', 'threatcrowd', 'tomba',
-  'urlscan', 'venacus', 'virustotal', 'waybackarchive', 'whoisxml', 'windvane', 'yahoo',
-  'zoomeye', 'zoomeyeapi', 'anubis', 'bing', 'threatminer'
+  'subdomaincenter', 'subdomainfinderc99', 'sublist3r', 'thc', 'threatcrowd', 'threatminer',
+  'tomba', 'urlscan', 'venacus', 'virustotal', 'waybackarchive', 'whoisxml', 'windvane',
+  'yahoo', 'zoomeye', 'zoomeyeapi'
 ];
 
-const RECOMMENDED_PRESET = [
-  'crtsh', 'dnsdumpster', 'duckduckgo', 'hackertarget', 'otx', 'urlscan', 'rapiddns', 'bevigil', 'brave'
-];
+const RECOMMENDED_PRESET = ['crtsh', 'dnsdumpster', 'duckduckgo', 'hackertarget', 'otx', 'urlscan', 'rapiddns'];
 
-function summarizeLogs(logs) {
-  const text = logs.join('\n');
-  const countMatches = (patterns) => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
-  const sourceLines = logs.filter(line => /\[(SUCCESS|ERROR|WARNING|STDERR)\]/i.test(line));
-  const counts = {
-    emails: countMatches([/emails? found/gi, /email addresses?/gi]),
-    hosts: countMatches([/hosts? found/gi, /subdomains? found/gi, /hostnames? found/gi]),
-    ips: countMatches([/ips? found/gi, /ip addresses?/gi]),
-    urls: countMatches([/urls? found/gi, /urls? discovered/gi]),
-  };
-  return {
-    entities: Object.entries(counts).map(([label, value]) => ({ label: label.toUpperCase(), value })),
-    events: [
-      { label: 'SUCCESS', value: sourceLines.filter(line => /\[SUCCESS\]/i.test(line)).length, color: 'var(--success)' },
-      { label: 'WARNING', value: sourceLines.filter(line => /\[WARNING\]/i.test(line)).length, color: 'var(--warning)' },
-      { label: 'ERROR', value: sourceLines.filter(line => /\[(ERROR|STDERR)\]/i.test(line)).length, color: 'var(--error)' },
-    ],
-    sources: [...new Set(logs.flatMap(line => {
-      const match = line.match(/(?:source|engine)[:=]\s*([a-z0-9_-]+)/i);
-      return match ? [match[1]] : [];
-    }))].slice(0, 8),
-    totalLines: logs.length,
-  };
+function unique(values) {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
 function extractEntities(logs) {
   const text = logs.join('\n');
-  const unique = (values) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
   const emails = unique(text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []);
   const ips = unique(text.match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g) || []);
   const urls = unique(text.match(/https?:\/\/[^\s<>"']+/gi) || []).map(url => url.replace(/[),.;]+$/, ''));
@@ -54,32 +30,37 @@ function extractEntities(logs) {
     const match = line.match(/^(?:[-*]\s*)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*$/);
     return match ? [match[1]] : [];
   }));
-  return { emails, hosts, ips, urls, people };
+  return { emails, hosts, ips, people, urls };
 }
 
-function EntityList({ title, values, emptyLabel = 'None captured' }) {
-  return (
-    <div className="entity-card">
-      <div className="entity-card-heading"><h3>{title}</h3><span>{values.length}</span></div>
-      {values.length ? (
-        <div className="entity-list">{values.slice(0, 30).map(value => <code key={value}>{value}</code>)}</div>
-      ) : <div className="chart-empty">{emptyLabel}</div>}
-      {values.length > 30 && <small className="entity-more">Showing 30 of {values.length}</small>}
-    </div>
-  );
+function summarizeLogs(logs) {
+  const text = logs.join('\n');
+  const count = (patterns) => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
+  const tagged = logs.filter(line => /\[(SUCCESS|ERROR|WARNING|STDERR)\]/i.test(line));
+  return {
+    entities: [
+      { label: 'EMAILS', value: count([/emails? found/gi, /email addresses?/gi]) },
+      { label: 'HOSTS', value: count([/hosts? found/gi, /subdomains? found/gi, /hostnames? found/gi]) },
+      { label: 'IPS', value: count([/ips? found/gi, /ip addresses?/gi]) },
+      { label: 'URLS', value: count([/urls? found/gi, /urls? discovered/gi]) },
+    ],
+    events: [
+      { label: 'SUCCESS', value: tagged.filter(line => /\[SUCCESS\]/i.test(line)).length, color: 'var(--success)' },
+      { label: 'WARNING', value: tagged.filter(line => /\[WARNING\]/i.test(line)).length, color: 'var(--warning)' },
+      { label: 'ERROR', value: tagged.filter(line => /\[(ERROR|STDERR)\]/i.test(line)).length, color: 'var(--danger)' },
+    ],
+    totalLines: logs.length,
+  };
 }
 
-function BarChart({ items, emptyLabel = 'No captured data yet.' }) {
+function BarChart({ items }) {
   const max = Math.max(...items.map(item => item.value), 1);
-  if (!items.length || items.every(item => item.value === 0)) {
-    return <div className="chart-empty">{emptyLabel}</div>;
-  }
   return (
     <div className="bar-chart">
       {items.map(item => (
         <div className="bar-row" key={item.label}>
-          <span className="bar-label">{item.label}</span>
-          <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.max((item.value / max) * 100, item.value ? 6 : 0)}%`, background: item.color || 'linear-gradient(90deg, var(--accent), var(--cyan))' }} /></div>
+          <span>{item.label}</span>
+          <div className="bar-track"><div className="bar-fill" style={{ width: `${item.value ? Math.max((item.value / max) * 100, 7) : 0}%`, background: item.color || 'var(--accent)' }} /></div>
           <strong>{item.value}</strong>
         </div>
       ))}
@@ -87,12 +68,21 @@ function BarChart({ items, emptyLabel = 'No captured data yet.' }) {
   );
 }
 
-function App() {
-  // Backend connection state
-  const [apiOnline, setApiOnline] = useState(false);
-  const [apiStatusText, setApiStatusText] = useState('Checking API...');
+function EntityPanel({ title, icon, values }) {
+  return (
+    <article className="entity-panel">
+      <div className="entity-panel-title"><span className="entity-icon">{icon}</span><h3>{title}</h3><b>{values.length}</b></div>
+      {values.length ? (
+        <div className="entity-values">{values.slice(0, 30).map(value => <code key={value}>{value}</code>)}</div>
+      ) : <p className="empty-state">No values captured in this report.</p>}
+      {values.length > 30 && <small>Showing 30 of {values.length}</small>}
+    </article>
+  );
+}
 
-  // Form input state
+function App() {
+  const [apiOnline, setApiOnline] = useState(false);
+  const [apiStatusText, setApiStatusText] = useState('Checking connection');
   const [domain, setDomain] = useState('');
   const [domainError, setDomainError] = useState('');
   const [limit, setLimit] = useState(500);
@@ -101,167 +91,106 @@ function App() {
   const [availableSources, setAvailableSources] = useState(FALLBACK_SUPPORTED_SOURCES);
   const [sourceSearch, setSourceSearch] = useState('');
   const [activePreset, setActivePreset] = useState('recommended');
-
-  // Job execution & terminal state
   const [currentJobId, setCurrentJobId] = useState(null);
-  const [currentCommand, setCurrentCommand] = useState('$ theHarvester -h');
-  const [currentStatus, setCurrentStatus] = useState('Idle'); // Idle | Queued | Running | Finished | Error
+  const [currentCommand, setCurrentCommand] = useState('theHarvester -h');
+  const [currentStatus, setCurrentStatus] = useState('Idle');
   const [exitCode, setExitCode] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [consoleLogs, setConsoleLogs] = useState([
-    '# Welcome to theHarvester OSINT Studio.',
-    '# Enter a target domain and select your passive intelligence sources on the left.',
-    '# Live reconnaissance output will stream directly into this console.'
-  ]);
-
+  const [consoleLogs, setConsoleLogs] = useState(['Ready for a passive collection job.']);
+  const [recentJobs, setRecentJobs] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeView, setActiveView] = useState('scan');
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
   const terminalBodyRef = useRef(null);
   const wsRef = useRef(null);
 
-  // History state
-  const [activeTab, setActiveTab] = useState('terminal'); // terminal | history
-  const [recentJobs, setRecentJobs] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+  const apiHost = host && host !== 'localhost' ? host : '127.0.0.1';
+  const API_BASE = `http://${apiHost}:8000`;
+  const WS_BASE = `ws://${apiHost}:8000`;
 
-  // Determine API base URL dynamically or fallback to localhost:8000
-  const getApiHost = () => {
-    const host = window.location.hostname;
-    return host && host !== 'localhost' ? host : '127.0.0.1';
-  };
-  const API_BASE = `http://${getApiHost()}:8000`;
-  const WS_BASE = `ws://${getApiHost()}:8000`;
+  const chartLogs = useMemo(() => consoleLogs.filter(line => !line.startsWith('[CONNECTION]')), [consoleLogs]);
+  const chartStats = useMemo(() => summarizeLogs(chartLogs), [chartLogs]);
+  const extractedEntities = useMemo(() => extractEntities(chartLogs), [chartLogs]);
+  const filteredSources = useMemo(() => availableSources.filter(source => source.toLowerCase().includes(sourceSearch.toLowerCase())), [availableSources, sourceSearch]);
+  const totalEntities = Object.values(extractedEntities).reduce((sum, values) => sum + values.length, 0);
 
-  // Check health and fetch sources on mount
   useEffect(() => {
     checkHealthAndSources();
-    const interval = setInterval(checkHealthAndSources, 15000);
-    return () => clearInterval(interval);
+    fetchRecentJobs();
+    const timer = window.setInterval(checkHealthAndSources, 15000);
+    return () => {
+      window.clearInterval(timer);
+      if (wsRef.current) wsRef.current.close();
+    };
   }, []);
 
-  const checkHealthAndSources = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/health`);
-      if (res.ok) {
-        setApiOnline(true);
-        setApiStatusText('API Online');
-      } else {
-        setApiOnline(false);
-        setApiStatusText('API Error');
-      }
-    } catch {
-      setApiOnline(false);
-      setApiStatusText('API Offline');
-    }
-
-    try {
-      const srcRes = await fetch(`${API_BASE}/api/sources`);
-      if (srcRes.ok) {
-        const data = await srcRes.json();
-        if (data && data.sources) {
-          setAvailableSources(data.sources);
-        }
-      }
-    } catch {
-      // Use fallback already set
-    }
-  };
-
-  const fetchRecentJobs = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/jobs`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.jobs) {
-          setRecentJobs(data.jobs);
-        }
-      }
-    } catch {
-      // Ignore errors when listing jobs
-    }
-  };
-
-  // Handle Terminal Auto-scroll with Pause-on-Scroll-Up behavior
-  const handleTerminalScroll = () => {
-    if (!terminalBodyRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = terminalBodyRef.current;
-    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    if (distanceToBottom > 45) {
-      if (isAutoScrollEnabled) setIsAutoScrollEnabled(false);
-    } else {
-      if (!isAutoScrollEnabled) setIsAutoScrollEnabled(true);
-    }
-  };
-
   useEffect(() => {
-    if (isAutoScrollEnabled && terminalBodyRef.current) {
-      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
-    }
+    if (isAutoScrollEnabled && terminalBodyRef.current) terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
   }, [consoleLogs, isAutoScrollEnabled]);
 
-  // Domain Regex validation
-  const validateDomain = (val) => {
-    const trimmed = val.trim().toLowerCase();
-    const domainRegex = /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!trimmed) {
-      return 'Domain is required.';
+  async function checkHealthAndSources() {
+    try {
+      const response = await fetch(`${API_BASE}/api/health`);
+      setApiOnline(response.ok);
+      setApiStatusText(response.ok ? 'API connected' : 'API returned an error');
+    } catch {
+      setApiOnline(false);
+      setApiStatusText('API offline');
     }
-    if (!domainRegex.test(trimmed)) {
-      return 'Invalid domain format (e.g. example.com). No spaces or symbols allowed.';
+    try {
+      const response = await fetch(`${API_BASE}/api/sources`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.sources) setAvailableSources(data.sources);
+      }
+    } catch {
+      // Keep the local fallback list when the API is unavailable.
     }
+  }
+
+  async function fetchRecentJobs() {
+    try {
+      const response = await fetch(`${API_BASE}/api/jobs`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecentJobs(data.jobs || []);
+      }
+    } catch {
+      // History is in-memory and is optional to the scan workspace.
+    }
+  }
+
+  function validateDomain(value) {
+    const candidate = value.trim().toLowerCase();
+    if (!candidate) return 'Enter a target domain.';
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(candidate)) return 'Use a valid domain such as example.com.';
     return '';
-  };
+  }
 
-  const handleDomainChange = (e) => {
-    const val = e.target.value;
-    setDomain(val);
-    if (val) {
-      setDomainError(validateDomain(val));
-    } else {
-      setDomainError('');
-    }
-  };
-
-  // Toggle single source checkbox
-  const handleSourceToggle = (src) => {
+  function toggleSource(source) {
     setActivePreset('custom');
-    if (src === 'all') {
+    if (source === 'all') {
       if (selectedSources.includes('all')) {
         setSelectedSources(RECOMMENDED_PRESET);
         setActivePreset('recommended');
-      } else {
-        setSelectedSources(['all']);
-        setActivePreset('all');
-      }
+      } else setSelectedSources(['all']);
       return;
     }
+    setSelectedSources(current => current.includes('all') ? [source] : current.includes(source) ? current.filter(item => item !== source) : [...current, source]);
+  }
 
-    let nextSources;
-    if (selectedSources.includes('all')) {
-      nextSources = [src];
-    } else if (selectedSources.includes(src)) {
-      nextSources = selectedSources.filter(s => s !== src);
-    } else {
-      nextSources = [...selectedSources, src];
-    }
-    setSelectedSources(nextSources);
-  };
+  function applyPreset(preset) {
+    setActivePreset(preset);
+    if (preset === 'recommended') setSelectedSources(RECOMMENDED_PRESET);
+    if (preset === 'all') setSelectedSources(['all']);
+    if (preset === 'clear') setSelectedSources([]);
+  }
 
-  const applyPreset = (presetType) => {
-    setActivePreset(presetType);
-    if (presetType === 'recommended') {
-      setSelectedSources(RECOMMENDED_PRESET);
-    } else if (presetType === 'all') {
-      setSelectedSources(['all']);
-    } else if (presetType === 'clear') {
-      setSelectedSources([]);
-    }
-  };
-
-  // Poll the REST result endpoint when WebSocket support is unavailable.
-  const pollJobResult = async (jobId, attempt = 0) => {
+  async function pollJobResult(jobId, attempt = 0) {
     if (attempt >= 120) {
       setCurrentStatus('Error');
-      setErrorMessage('Live stream unavailable and REST polling timed out. Check the backend log.');
+      setErrorMessage('Result polling timed out. Check the backend terminal.');
       setIsSubmitting(false);
       return;
     }
@@ -273,137 +202,85 @@ function App() {
       setCurrentStatus(data.status);
       setExitCode(data.exit_code);
       setErrorMessage(data.error_message || null);
-      if (data.status === 'Running' || data.status === 'Queued') {
-        window.setTimeout(() => pollJobResult(jobId, attempt + 1), 1000);
-      } else {
+      if (data.status === 'Running' || data.status === 'Queued') window.setTimeout(() => pollJobResult(jobId, attempt + 1), 1000);
+      else {
         setIsSubmitting(false);
         fetchRecentJobs();
       }
     } catch (error) {
-      setErrorMessage(error.message || 'Could not retrieve scan results.');
+      setErrorMessage(error.message || 'Could not retrieve the scan result.');
       setIsSubmitting(false);
     }
-  };
+  }
 
-  // Connect to WebSocket to stream live output
-  const connectWebSocket = (jobId) => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    const wsUrl = `${WS_BASE}/api/scan/${jobId}/stream`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+  function connectWebSocket(jobId) {
+    if (wsRef.current) wsRef.current.close();
+    const socket = new WebSocket(`${WS_BASE}/api/scan/${jobId}/stream`);
+    wsRef.current = socket;
+    let settled = false;
     let fallbackStarted = false;
     const startFallback = () => {
-      if (fallbackStarted) return;
+      if (fallbackStarted || settled) return;
       fallbackStarted = true;
-      setConsoleLogs(prev => [...prev.filter(line => !line.startsWith('[CONNECTION]')), '[CONNECTION] WebSocket unavailable; using REST result polling.']);
+      setConsoleLogs(previous => [...previous.filter(line => !line.startsWith('[CONNECTION]')), '[CONNECTION] Live stream unavailable; using result polling.']);
       pollJobResult(jobId);
     };
-
-    ws.onopen = () => {
-      // Connected successfully
-    };
-
-    ws.onmessage = (event) => {
+    socket.onmessage = event => {
       try {
         const payload = JSON.parse(event.data);
-        if (payload.type === 'command') {
-          setCurrentCommand(payload.data);
-        } else if (payload.type === 'status') {
-          setCurrentStatus(payload.status);
-        } else if (payload.type === 'output') {
-          setConsoleLogs(prev => [...prev, payload.data]);
-        } else if (payload.type === 'done') {
+        if (payload.type === 'command') setCurrentCommand(payload.data);
+        if (payload.type === 'status') setCurrentStatus(payload.status);
+        if (payload.type === 'output') setConsoleLogs(previous => [...previous, payload.data]);
+        if (payload.type === 'done') {
+          settled = true;
           setCurrentStatus(payload.status);
           setExitCode(payload.exit_code);
-          setErrorMessage(payload.error_message);
+          setErrorMessage(payload.error_message || null);
           setIsSubmitting(false);
           fetchRecentJobs();
         }
       } catch {
-        // If raw string
-        setConsoleLogs(prev => [...prev, event.data]);
+        setConsoleLogs(previous => [...previous, event.data]);
       }
     };
+    socket.onerror = startFallback;
+    socket.onclose = () => { if (!settled) startFallback(); };
+  }
 
-    ws.onerror = () => {
-      startFallback();
-    };
-
-    ws.onclose = () => {
-      if (currentStatus === 'Running' || currentStatus === 'Queued') {
-        startFallback();
-      }
-    };
-  };
-
-  // Submit scan job
-  const handleStartScan = async (e) => {
-    e.preventDefault();
-    const err = validateDomain(domain);
-    if (err) {
-      setDomainError(err);
-      return;
-    }
-    if (!selectedSources || selectedSources.length === 0) {
-      alert('Please select at least one data source.');
-      return;
-    }
-
+  async function handleStartScan(event) {
+    event.preventDefault();
+    const validationError = validateDomain(domain);
+    setDomainError(validationError);
+    if (validationError || !selectedSources.length) return;
     setIsSubmitting(true);
+    setActiveView('scan');
     setCurrentStatus('Queued');
     setExitCode(null);
     setErrorMessage(null);
-    setActiveTab('terminal');
-    setIsAutoScrollEnabled(true);
-    setConsoleLogs([
-      `# Initializing recon scan for domain: ${domain.trim()}`,
-      `# Selected sources: ${selectedSources.join(', ')}`,
-      `# Limit: ${limit} | DNS Brute: ${dnsBrute ? 'Enabled (-c)' : 'Disabled'}`,
-      `# Connecting to backend executor...`
-    ]);
-
+    setConsoleLogs([]);
     try {
       const response = await fetch(`${API_BASE}/api/scan`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          domain: domain.trim(),
-          sources: selectedSources,
-          limit: Number(limit),
-          dns_brute: Boolean(dnsBrute)
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: domain.trim(), sources: selectedSources, limit: Number(limit), dns_brute: Boolean(dnsBrute) })
       });
-
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server error (${response.status})`);
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || `Backend returned ${response.status}`);
       }
-
       const data = await response.json();
       setCurrentJobId(data.job_id);
-      if (data.command_str) {
-        setCurrentCommand(data.command_str);
-      }
-
-      // Connect to WebSocket stream immediately
-      setConsoleLogs([]); // Clear initialization messages to show pure command & stream
+      setCurrentCommand(data.command_str || `theHarvester -d ${domain.trim()}`);
       connectWebSocket(data.job_id);
-
     } catch (error) {
       setCurrentStatus('Error');
-      setErrorMessage(error.message || 'Failed to trigger scan job.');
-      setConsoleLogs(prev => [...prev, `[ERROR] ${error.message}`]);
+      setErrorMessage(error.message || 'Could not start the scan.');
+      setConsoleLogs([`[ERROR] ${error.message || 'Could not start the scan.'}`]);
       setIsSubmitting(false);
     }
-  };
+  }
 
-  // View historical job details
-  const handleSelectRecentJob = async (job) => {
+  async function selectJob(job) {
+    setActiveView('scan');
     setCurrentJobId(job.job_id);
     setDomain(job.domain);
     setSelectedSources(job.sources);
@@ -413,483 +290,99 @@ function App() {
     setCurrentStatus(job.status);
     setExitCode(job.exit_code);
     setErrorMessage(null);
-    setActiveTab('terminal');
-    setIsAutoScrollEnabled(true);
-
     try {
-      const res = await fetch(`${API_BASE}/api/scan/${job.job_id}/result`);
-      if (res.ok) {
-        const data = await res.json();
-        setConsoleLogs(data.output_lines || []);
-        if (data.status === 'Running') {
-          connectWebSocket(job.job_id);
-        }
-      }
+      const response = await fetch(`${API_BASE}/api/scan/${job.job_id}/result`);
+      const data = await response.json();
+      setConsoleLogs(data.output_lines || []);
+      if (data.status === 'Running' || data.status === 'Queued') connectWebSocket(job.job_id);
     } catch {
-      setConsoleLogs([`[ERROR] Could not load results for Job ${job.job_id}`]);
+      setConsoleLogs(['[ERROR] Could not load this scan result.']);
     }
-  };
+  }
 
-  // Download Output .txt file
-  const handleDownloadOutput = async () => {
-    if (!currentJobId) {
-      // Fallback blob download if no jobId yet
+  function downloadReport() {
+    if (currentJobId) window.open(`${API_BASE}/api/scan/${currentJobId}/download`, '_blank');
+    else {
       const blob = new Blob([consoleLogs.join('\n')], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `theHarvester_${domain || 'recon'}_output.txt`;
+      link.download = `theHarvester_${domain || 'report'}.txt`;
       link.click();
-      return;
+      URL.revokeObjectURL(url);
     }
+  }
 
-    // Use clean backend attachment endpoint
-    window.open(`${API_BASE}/api/scan/${currentJobId}/download`, '_blank');
-  };
+  function copyCommand() {
+    navigator.clipboard?.writeText(currentCommand);
+  }
 
-  // Copy command string to clipboard
-  const handleCopyCommand = () => {
-    navigator.clipboard.writeText(currentCommand);
-    alert('Command copied to clipboard!');
-  };
-
-  // Filter sources for display
-  const chartLogs = consoleLogs.filter(line => !line.startsWith('[CONNECTION]'));
-  const chartStats = summarizeLogs(chartLogs);
-  const extractedEntities = extractEntities(chartLogs);
-  const filteredSources = availableSources.filter(s =>
-    s.toLowerCase().includes(sourceSearch.toLowerCase())
-  );
-
-  // Helper for terminal log coloring
-  const getLogClass = (line) => {
-    if (line.includes('[SUCCESS]') || line.includes('[+]') || line.includes('Found ')) return 'line-success';
-    if (line.includes('[ERROR]') || line.includes('[-]')) return 'line-error';
-    if (line.includes('[WARNING]') || line.includes('[!]')) return 'line-warning';
-    if (line.includes('[STDERR]')) return 'line-stderr';
-    if (line.startsWith('$') || line.startsWith('theHarvester')) return 'line-command';
-    if (line.includes('[*]') || line.includes('[INFO]')) return 'line-info';
+  function logClass(line) {
+    if (/\[(ERROR|STDERR)\]/i.test(line)) return 'log-danger';
+    if (/\[WARNING\]|\[!\]/i.test(line)) return 'log-warning';
+    if (/\[SUCCESS\]|\[\+\]|Found /i.test(line)) return 'log-success';
+    if (/^theHarvester|^\$/i.test(line)) return 'log-command';
     return '';
-  };
+  }
 
   return (
-    <div className="app-wrapper">
-      {/* Top Header */}
-      <header className="top-header">
-        <div className="brand">
-          <div className="brand-icon">CS</div>
-          <div className="brand-text">
-            <h1>Cyber Shield</h1>
-
-            
-            <p>Passive Reconnaissance & Domain Intelligence Console</p>
-          </div>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand-block"><div className="brand-mark">H</div><div><strong>Harvester</strong><span>OSINT workspace</span></div></div>
+        <div className="sidebar-section-label">Workspace</div>
+        <nav className="main-nav">
+          <button className={activeView === 'scan' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveView('scan')}><span>⌁</span>Scan workspace</button>
+          <button className={activeView === 'history' ? 'nav-item active' : 'nav-item'} onClick={() => { setActiveView('history'); fetchRecentJobs(); }}><span>◷</span>Scan history</button>
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="scope-note"><span className="scope-dot" />Passive collection only</div>
+          <p>Use this workspace only for domains and assets you own or are authorized to assess.</p>
+          <div className="sidebar-version">Local operator console <span>v1.0</span></div>
         </div>
-        <div className="header-status">
-          <div className={`status-pill ${apiOnline ? 'online' : 'offline'}`}>
-            <span className="pulse-dot"></span>
-            <span>{apiStatusText}</span>
-          </div>
-        </div>
-      </header>
+      </aside>
 
-      {/* Main Container */}
-      <main className="main-container">
-        {/* Left Column: Form Setup */}
-        <section className="glass-card form-section">
-          <div className="card-heading">
-            <h2>Recon Configuration</h2>
-          </div>
+      <main className="main-shell">
+        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> {activeView === 'scan' ? 'Scan' : 'History'}</div><div className={apiOnline ? 'connection-pill online' : 'connection-pill'}><span />{apiStatusText}</div></header>
 
-          <form onSubmit={handleStartScan} className="form-section">
-            {/* Target Domain Input */}
-            <div className="field-group">
-              <label className="field-label">
-                <span>Target Domain</span>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Strict Validated</span>
-              </label>
-              <div className="input-with-icon">
-                <span className="input-icon"></span>
-                <input
-                  type="text"
-                  className={`text-input ${domainError ? 'input-error' : ''}`}
-                  placeholder="example.com"
-                  value={domain}
-                  onChange={handleDomainChange}
-                  required
-                />
-              </div>
-              {domainError && <div className="error-hint">{domainError}</div>}
-            </div>
-
-            {/* Limit Input & DNS Brute Checkbox */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="field-group">
-                <label className="field-label"><span>Result Limit (-l)</span></label>
-                <input
-                  type="number"
-                  className="number-input"
-                  min="1"
-                  max="5000"
-                  step="1"
-                  value={limit}
-                  onChange={(e) => setLimit(Number(e.target.value))}
-                  required
-                />
-              </div>
-
-              <div className="field-group" style={{ justifyContent: 'flex-end' }}>
-                <div
-                  className={`checkbox-card ${dnsBrute ? 'active' : ''}`}
-                  onClick={() => setDnsBrute(!dnsBrute)}
-                >
-                  <div className="checkbox-info">
-                    <h4>DNS Brute (-c)</h4>
-                    <p>Subdomain brute force</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={dnsBrute}
-                    onChange={() => setDnsBrute(!dnsBrute)}
-                    style={{ accentColor: 'var(--cyan)', width: '18px', height: '18px' }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Data Sources Multi-Select Box */}
-            <div className="field-group">
-              <div className="sources-header-bar">
-                <label className="field-label">
-                  <span>Data Sources (-b)</span>
-                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
-                    {selectedSources.includes('all') ? 'ALL Sources' : `${selectedSources.length} Selected`}
-                  </span>
-                </label>
-                <div className="preset-buttons">
-                  <button
-                    type="button"
-                    className={`preset-btn ${activePreset === 'recommended' ? 'active' : ''}`}
-                    onClick={() => applyPreset('recommended')}
-                  >
-                    Recommended
-                  </button>
-                  <button
-                    type="button"
-                    className={`preset-btn ${activePreset === 'all' ? 'active' : ''}`}
-                    onClick={() => applyPreset('all')}
-                  >
-                    All (-b all)
-                  </button>
-                  <button
-                    type="button"
-                    className="preset-btn"
-                    onClick={() => applyPreset('clear')}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              {/* Source Search Bar */}
-              <input
-                type="text"
-                className="sources-search-input"
-                placeholder="Filter sources (e.g. crtsh, shodan, urlscan)..."
-                value={sourceSearch}
-                onChange={(e) => setSourceSearch(e.target.value)}
-              />
-
-              {/* Sources Grid Checkboxes */}
-              <div className="sources-grid-box">
-                <label
-                  key="source-all"
-                  className={`source-checkbox-label ${selectedSources.includes('all') ? 'selected' : ''}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedSources.includes('all')}
-                    onChange={() => handleSourceToggle('all')}
-                  />
-                  <span>ALL SOURCES (-b all)</span>
-                </label>
-
-                {filteredSources.map(src => {
-                  const isChecked = selectedSources.includes('all') || selectedSources.includes(src);
-                  return (
-                    <label
-                      key={src}
-                      className={`source-checkbox-label ${isChecked ? 'selected' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleSourceToggle(src)}
-                        disabled={selectedSources.includes('all')}
-                      />
-                      <span>{src}</span>
-                    </label>
-                  );
-                })}
-                {filteredSources.length === 0 && (
-                  <div style={{ padding: '10px', color: 'var(--text-dim)', fontSize: '0.8rem', gridColumn: '1 / -1' }}>
-                    No matching sources found.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              className="submit-btn"
-              disabled={isSubmitting || !!domainError || !domain.trim() || selectedSources.length === 0}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="spinner"></span>
-                  <span>Executing Scan Job...</span>
-                </>
-              ) : (
-                <>
-                  <span>▶ Launch Recon Scan</span>
-                </>
-              )}
-            </button>
-          </form>
+        <section className="page-intro">
+          <div><div className="overline">Passive intelligence console</div><h1>{activeView === 'scan' ? 'Investigate an external footprint.' : 'Review recent investigations.'}</h1><p>{activeView === 'scan' ? 'Collect public domain intelligence from approved sources, then review the evidence in one focused workspace.' : 'Select a completed job to reopen its captured output and extracted entities.'}</p></div>
+          <div className="intro-stat"><span>Current target</span><strong>{domain || 'No target selected'}</strong><small>{currentStatus} {currentJobId ? `· ${currentJobId.slice(0, 8)}` : ''}</small></div>
         </section>
 
-        {/* Right Column: Live Output / History */}
-        <section className="content-area">
-          {/* Command Display Box */}
-          <div className="command-box-card">
-            <div className="command-content">
-              <span className="prompt-symbol">❯</span>
-              <span className="command-text" title={currentCommand}>
-                {currentCommand}
-              </span>
-            </div>
-            <button type="button" className="copy-btn" onClick={handleCopyCommand}>
-              <span>Copy</span>
-            </button>
+        {activeView === 'history' ? (
+          <section className="history-view card-surface"><div className="section-heading"><div><span className="overline">Stored in this session</span><h2>Recent scan jobs</h2></div><button className="button secondary" onClick={fetchRecentJobs}>Refresh</button></div>{recentJobs.length ? <div className="history-list">{recentJobs.map(job => <button className="history-row" key={job.job_id} onClick={() => selectJob(job)}><span className="history-domain">{job.domain}<small>{new Date(job.created_at * 1000).toLocaleString()}</small></span><span>{job.sources.includes('all') ? 'All sources' : `${job.sources.length} sources`}</span><span className={`status-tag ${job.status.toLowerCase()}`}>{job.status}</span><span className="history-arrow">→</span></button>)}</div> : <div className="large-empty">No scan jobs are stored in memory yet.</div>}</section>
+        ) : (
+          <div className="workspace-grid">
+            <section className="config-column">
+              <div className="card-surface config-card"><div className="section-heading compact"><div><span className="overline">Step 01</span><h2>Configure collection</h2></div><span className="step-badge">Passive</span></div>
+                <form onSubmit={handleStartScan}>
+                  <label className="field-label">Target domain <span>Required</span></label>
+                  <input className={domainError ? 'field-input invalid' : 'field-input'} value={domain} onChange={event => { setDomain(event.target.value); setDomainError(validateDomain(event.target.value)); }} placeholder="example.com" autoComplete="off" />
+                  {domainError && <p className="field-error">{domainError}</p>}
+                  <div className="field-row"><div><label className="field-label">Result limit</label><input className="field-input" type="number" min="1" max="5000" value={limit} onChange={event => setLimit(event.target.value)} /></div><label className={dnsBrute ? 'toggle-card checked' : 'toggle-card'}><input type="checkbox" checked={dnsBrute} onChange={event => setDnsBrute(event.target.checked)} /><span><b>DNS brute force</b><small>Enumerate likely subdomains</small></span><i>{dnsBrute ? 'On' : 'Off'}</i></label></div>
+                  <div className="sources-heading"><label className="field-label">Sources <span>{selectedSources.includes('all') ? 'All selected' : `${selectedSources.length} selected`}</span></label><div className="preset-row"><button type="button" className={activePreset === 'recommended' ? 'preset active' : 'preset'} onClick={() => applyPreset('recommended')}>Recommended</button><button type="button" className={activePreset === 'all' ? 'preset active' : 'preset'} onClick={() => applyPreset('all')}>All</button><button type="button" className="preset" onClick={() => applyPreset('clear')}>Clear</button></div></div>
+                  <input className="search-input" value={sourceSearch} onChange={event => setSourceSearch(event.target.value)} placeholder="Search sources" />
+                  <div className="source-list"><label className={selectedSources.includes('all') ? 'source-option selected' : 'source-option'}><input type="checkbox" checked={selectedSources.includes('all')} onChange={() => toggleSource('all')} /><span>All supported sources</span></label>{filteredSources.map(source => <label className={selectedSources.includes('all') || selectedSources.includes(source) ? 'source-option selected' : 'source-option'} key={source}><input type="checkbox" checked={selectedSources.includes('all') || selectedSources.includes(source)} disabled={selectedSources.includes('all')} onChange={() => toggleSource(source)} /><span>{source}</span></label>)}</div>
+                  <button className="button primary launch-button" type="submit" disabled={isSubmitting || !!domainError || !domain.trim() || !selectedSources.length}><span>{isSubmitting ? 'Running collection…' : 'Start passive collection'}</span><b>↗</b></button>
+                </form>
+              </div>
+            </section>
+
+            <section className="results-column">
+              <div className="result-header card-surface"><div><span className="overline">Step 02 · Live evidence</span><h2>{domain || 'Awaiting a target'}</h2><div className="command-line"><span>$</span>{currentCommand}</div></div><div className="result-actions"><span className={`status-tag ${currentStatus.toLowerCase()}`}>{currentStatus}{exitCode !== null ? ` · ${exitCode}` : ''}</span><button className="icon-button" onClick={copyCommand} title="Copy command">Copy</button><button className="button secondary small" onClick={downloadReport}>Export report</button></div></div>
+              {errorMessage && <div className="alert-card"><span>!</span><div><b>Collection needs attention</b><p>{errorMessage}</p></div></div>}
+              <div className="metric-grid"><div className="metric-card"><span>Captured entities</span><strong>{totalEntities}</strong><small>Unique values</small></div><div className="metric-card"><span>Output lines</span><strong>{chartStats.totalLines}</strong><small>From live report</small></div><div className="metric-card"><span>Sources selected</span><strong>{selectedSources.includes('all') ? 'All' : selectedSources.length}</strong><small>Configured engines</small></div><div className="metric-card"><span>Scan state</span><strong className="metric-state">{currentStatus}</strong><small>{apiOnline ? 'Backend reachable' : 'Check backend'}</small></div></div>
+
+              <div className="terminal-card card-surface"><div className="terminal-heading"><div><span className="overline">Live output</span><h3>Collection stream</h3></div><span className="terminal-meta">{chartStats.totalLines} lines</span></div><div className="terminal-body" ref={terminalBodyRef} onScroll={() => { if (!terminalBodyRef.current) return; const distance = terminalBodyRef.current.scrollHeight - terminalBodyRef.current.scrollTop - terminalBodyRef.current.clientHeight; setIsAutoScrollEnabled(distance < 45); }}>{consoleLogs.map((line, index) => <div className={`log-line ${logClass(line)}`} key={`${index}-${line}`}>{line}</div>)}{currentStatus === 'Running' && <div className="log-line log-live"><span />Waiting for provider output…</div>}</div>{!isAutoScrollEnabled && <button className="resume-button" onClick={() => { setIsAutoScrollEnabled(true); terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight; }}>Resume live view</button>}</div>
+
+              <div className="insights-heading"><div><span className="overline">Step 03 · Review</span><h2>Collected intelligence</h2></div><span className="insight-note">Only values found in the report are shown</span></div>
+              <div className="entity-grid"><EntityPanel title="Email addresses" icon="@" values={extractedEntities.emails} /><EntityPanel title="Hosts & domains" icon="◇" values={extractedEntities.hosts} /><EntityPanel title="IP addresses" icon="#" values={extractedEntities.ips} /><EntityPanel title="People" icon="◌" values={extractedEntities.people} /><EntityPanel title="URLs" icon="↗" values={extractedEntities.urls} /></div>
+              <div className="analytics-grid"><div className="analytics-card card-surface"><div className="analytics-title"><div><span className="overline">Distribution</span><h3>Report indicators</h3></div></div><BarChart items={chartStats.entities} /></div><div className="analytics-card card-surface"><div className="analytics-title"><div><span className="overline">Health</span><h3>Provider events</h3></div></div><BarChart items={chartStats.events} /></div></div>
+            </section>
           </div>
-
-          {/* Status Indicators & View Toggle Bar */}
-          <div className="status-bar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Status:</span>
-              <span className={`status-badge ${currentStatus}`}>
-                {currentStatus === 'Running' && <span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px' }}></span>}
-                {currentStatus}
-                {exitCode !== null && ` (Exit: ${exitCode})`}
-              </span>
-              {errorMessage && (
-                <span style={{ fontSize: '0.82rem', color: 'var(--error)', maxWidth: '400px' }}>
-                  {errorMessage}
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                className={`history-toggle-btn ${activeTab === 'terminal' ? 'active' : ''}`}
-                onClick={() => setActiveTab('terminal')}
-              >
-                Live Terminal Output
-              </button>
-              <button
-                type="button"
-                className={`history-toggle-btn ${activeTab === 'history' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('history');
-                  fetchRecentJobs();
-                }}
-              >
-                Recent Scan Jobs
-              </button>
-              {(currentStatus === 'Finished' || currentStatus === 'Error' || consoleLogs.length > 5) && (
-                <button
-                  type="button"
-                  className="download-btn"
-                  onClick={handleDownloadOutput}
-                  title="Download .txt report"
-                >
-                  <span>Download Report (.txt)</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Terminal View */}
-          {activeTab === 'terminal' ? (
-            <div className="terminal-panel">
-              <div className="terminal-top-bar">
-                <div className="mac-buttons">
-                  <span className="mac-btn close"></span>
-                  <span className="mac-btn minimize"></span>
-                  <span className="mac-btn maximize"></span>
-                </div>
-                <div className="terminal-tab-title">
-                  <span>bash — theHarvester — {currentStatus}</span>
-                </div>
-                <div className="terminal-actions">
-                  <button
-                    type="button"
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer' }}
-                    onClick={() => setConsoleLogs([])}
-                  >
-                    Clear Console
-                  </button>
-                </div>
-              </div>
-
-              {/* Terminal Logs Body */}
-              <div
-                className="terminal-body"
-                ref={terminalBodyRef}
-                onScroll={handleTerminalScroll}
-              >
-                {consoleLogs.map((line, idx) => (
-                  <div key={idx} className={`log-entry ${getLogClass(line)}`}>
-                    {line}
-                  </div>
-                ))}
-                {currentStatus === 'Running' && (
-                  <div className="log-entry line-info" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                    <span className="spinner" style={{ width: '12px', height: '12px' }}></span>
-                    <span>Reconnaissance process active... waiting for stream output...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Floating Resume Auto-Scroll Button */}
-              {!isAutoScrollEnabled && currentStatus === 'Running' && (
-                <button
-                  type="button"
-                  className="scroll-resume-toast"
-                  onClick={() => {
-                    setIsAutoScrollEnabled(true);
-                    if (terminalBodyRef.current) {
-                      terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
-                    }
-                  }}
-                >
-                  <span>↓ Resume Auto-scroll</span>
-                </button>
-              )}
-              <div className="results-dashboard">
-                <div className="results-dashboard-heading">
-                  <div>
-                    <span className="eyebrow">Captured intelligence</span>
-                    <h2>Scan result charts</h2>
-                  </div>
-                  <span className="result-line-count">{chartStats.totalLines} captured lines</span>
-                </div>
-                <div className="chart-grid">
-                  <div className="chart-card">
-                    <h3>Entity indicators</h3>
-                    <BarChart items={chartStats.entities} emptyLabel="Counts appear as providers report entities." />
-                  </div>
-                  <div className="chart-card">
-                    <h3>Event severity</h3>
-                    <BarChart items={chartStats.events} emptyLabel="No tagged events yet." />
-                  </div>
-                  <div className="chart-card chart-card-wide">
-                    <h3>Sources reported in output</h3>
-                    {chartStats.sources.length ? (
-                      <div className="source-chips">{chartStats.sources.map(source => <span key={source}>{source}</span>)}</div>
-                    ) : (
-                      <div className="chart-empty">Source labels will appear when the engine reports them.</div>
-                    )}
-                  </div>
-                </div>
-                <div className="entity-grid">
-                  <EntityList title="Emails" values={extractedEntities.emails} />
-                  <EntityList title="Hosts / Domains" values={extractedEntities.hosts} />
-                  <EntityList title="IP Addresses" values={extractedEntities.ips} />
-                  <EntityList title="People" values={extractedEntities.people} />
-                  <EntityList title="URLs" values={extractedEntities.urls} />
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* History Table View */
-            <div className="glass-card">
-              <div className="card-heading">
-                <h2>Recent Scans History</h2>
-                <button
-                  type="button"
-                  className="copy-btn"
-                  onClick={fetchRecentJobs}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {recentJobs.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>
-                  No previous scan jobs found in memory yet.
-                </div>
-              ) : (
-                <div className="history-table-container">
-                  <table className="history-table">
-                    <thead>
-                      <tr>
-                        <th>Domain</th>
-                        <th>Sources</th>
-                        <th>Limit</th>
-                        <th>Status</th>
-                        <th>Date</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentJobs.map(job => (
-                        <tr key={job.job_id} onClick={() => handleSelectRecentJob(job)}>
-                          <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>{job.domain}</td>
-                          <td>
-                            {job.sources.includes('all') ? (
-                              <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>ALL</span>
-                            ) : (
-                              `${job.sources.length} sources`
-                            )}
-                          </td>
-                          <td>{job.limit}</td>
-                          <td>
-                            <span className={`status-badge ${job.status}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.74rem' }}>
-                              {job.status}
-                            </span>
-                          </td>
-                          <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                            {new Date(job.created_at * 1000).toLocaleTimeString()}
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              View Logs ➔
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+        )}
+        <footer className="app-footer">Harvester OSINT workspace <span>·</span> Passive, authorized collection only <span>·</span> Local session</footer>
       </main>
-
-      {/* Footer */}
-      <footer className="footer">
-        <p>theHarvester Web UI & Local OSINT Console — Built with Python FastAPI, WebSockets & React</p>
-        <p style={{ marginTop: '4px', fontSize: '0.76rem', color: '#475569' }}>
-          Security Guarantee: Strict input regex validation | Whitelisted flags | No shell=True execution | Subprocess auto-kill timeouts
-        </p>
-      </footer>
     </div>
   );
 }
