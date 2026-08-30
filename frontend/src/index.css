@@ -786,6 +786,16 @@ body {
 .source-chips span { padding: 0.35rem 0.55rem; border: 1px solid rgba(6, 182, 212, 0.25); border-radius: 999px; background: rgba(6, 182, 212, 0.08); color: var(--cyan); font-family: var(--font-mono); font-size: 0.7rem; }
 @media (max-width: 760px) { .chart-grid { grid-template-columns: 1fr; } .chart-card-wide { grid-column: auto; } .results-dashboard-heading { align-items: flex-start; flex-direction: column; } }
 
+.entity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; margin-top: 0.85rem; }
+.entity-card { min-width: 0; padding: 1rem; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(12, 21, 39, 0.72); }
+.entity-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.7rem; }
+.entity-card-heading h3 { color: var(--text-muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.entity-card-heading span { min-width: 1.5rem; padding: 0.15rem 0.35rem; border-radius: 999px; background: rgba(79, 127, 232, 0.16); color: var(--cyan); font-size: 0.72rem; text-align: center; }
+.entity-list { display: flex; flex-direction: column; gap: 0.35rem; max-height: 150px; overflow-y: auto; }
+.entity-list code { overflow: hidden; padding: 0.35rem 0.45rem; border-radius: 5px; background: rgba(0, 0, 0, 0.18); color: var(--text-main); font-family: var(--font-mono); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.entity-more { display: block; margin-top: 0.55rem; color: var(--text-dim); font-size: 0.7rem; }
+@media (max-width: 760px) { .entity-grid { grid-template-columns: 1fr; } }
+
 /* Footer */
 .footer {
   text-align: center;

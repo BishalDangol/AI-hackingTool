@@ -42,6 +42,33 @@ function summarizeLogs(logs) {
   };
 }
 
+function extractEntities(logs) {
+  const text = logs.join('\n');
+  const unique = (values) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  const emails = unique(text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []);
+  const ips = unique(text.match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g) || []);
+  const urls = unique(text.match(/https?:\/\/[^\s<>"']+/gi) || []).map(url => url.replace(/[),.;]+$/, ''));
+  const hosts = unique(text.match(/\b(?=[a-z0-9.-]{4,253}\b)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b/gi) || [])
+    .filter(host => !emails.some(email => email.endsWith(host)) && !urls.some(url => url.includes(host)));
+  const people = unique(logs.flatMap(line => {
+    const match = line.match(/^(?:[-*]\s*)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*$/);
+    return match ? [match[1]] : [];
+  }));
+  return { emails, hosts, ips, urls, people };
+}
+
+function EntityList({ title, values, emptyLabel = 'None captured' }) {
+  return (
+    <div className="entity-card">
+      <div className="entity-card-heading"><h3>{title}</h3><span>{values.length}</span></div>
+      {values.length ? (
+        <div className="entity-list">{values.slice(0, 30).map(value => <code key={value}>{value}</code>)}</div>
+      ) : <div className="chart-empty">{emptyLabel}</div>}
+      {values.length > 30 && <small className="entity-more">Showing 30 of {values.length}</small>}
+    </div>
+  );
+}
+
 function BarChart({ items, emptyLabel = 'No captured data yet.' }) {
   const max = Math.max(...items.map(item => item.value), 1);
   if (!items.length || items.every(item => item.value === 0)) {
@@ -429,6 +456,7 @@ function App() {
   // Filter sources for display
   const chartLogs = consoleLogs.filter(line => !line.startsWith('[CONNECTION]'));
   const chartStats = summarizeLogs(chartLogs);
+  const extractedEntities = extractEntities(chartLogs);
   const filteredSources = availableSources.filter(s =>
     s.toLowerCase().includes(sourceSearch.toLowerCase())
   );
@@ -775,6 +803,13 @@ function App() {
                       <div className="chart-empty">Source labels will appear when the engine reports them.</div>
                     )}
                   </div>
+                </div>
+                <div className="entity-grid">
+                  <EntityList title="Emails" values={extractedEntities.emails} />
+                  <EntityList title="Hosts / Domains" values={extractedEntities.hosts} />
+                  <EntityList title="IP Addresses" values={extractedEntities.ips} />
+                  <EntityList title="People" values={extractedEntities.people} />
+                  <EntityList title="URLs" values={extractedEntities.urls} />
                 </div>
               </div>
             </div>
