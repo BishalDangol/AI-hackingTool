@@ -810,3 +810,71 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Modern restrained theme */
+:root {
+  --bg-dark: #0f172a;
+  --bg-card: #111c31;
+  --bg-card-hover: #16243d;
+  --bg-input: #0b1324;
+  --border-color: #263550;
+  --border-active: #5b8def;
+  --accent: #4f7fe8;
+  --accent-hover: #3d6ed8;
+  --accent-glow: rgba(79, 127, 232, 0.18);
+  --cyan: #56b4d9;
+  --success: #45b98b;
+  --warning: #e4ad58;
+  --error: #e87878;
+  --purple: #927bd9;
+  --text-main: #f1f5f9;
+  --text-muted: #a5b4c8;
+  --text-dim: #70819a;
+  --shadow-lg: 0 12px 30px rgba(2, 8, 23, 0.28);
+  --shadow-glow: none;
+}
+body {
+  background: var(--bg-dark);
+  background-image: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+}
+.top-header {
+  background: rgba(15, 23, 42, 0.96);
+  border-bottom-color: #263550;
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.2);
+}
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent);
+  box-shadow: none;
+}
+.brand-text h1 { background: none; -webkit-text-fill-color: initial; color: var(--text-main); }
+.glass-card, .status-bar, .results-dashboard, .chart-card {
+  background: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-lg);
+}
+.glass-card { border-radius: 14px; }
+.command-box-card, .terminal-panel {
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-lg);
+}
+.command-box-card { background: #0c1527; }
+.text-input, .number-input, .sources-search-input { background: var(--bg-input); border-color: var(--border-color); }
+.text-input:focus, .number-input:focus, .sources-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.sources-grid-box { background: #0c1527; border-color: var(--border-color); }
+.source-checkbox-label.selected { background: rgba(79, 127, 232, 0.14); }
+.submit-btn { background: var(--accent); box-shadow: 0 6px 16px rgba(79, 127, 232, 0.22); }
+.submit-btn:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 8px 20px rgba(79, 127, 232, 0.3); }
+.terminal-panel { background: #08111f; }
+.terminal-top-bar { background: #101b2e; }
+.results-dashboard { border-radius: 14px; }
+.chart-card { box-shadow: none; }
+.download-btn { background: rgba(69, 185, 139, 0.1); }
+.footer { border-top-color: var(--border-color); }
+@media (max-width: 700px) {
+  .top-header { padding: 1rem 1.25rem; }
+  .main-container { padding: 1rem; gap: 1rem; }
+  .status-bar { align-items: flex-start; flex-direction: column; }
+}
