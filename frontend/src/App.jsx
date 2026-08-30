@@ -1,23 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-const FALLBACK_SUPPORTED_SOURCES = [
-  'anubis', 'baidu', 'bevigil', 'bing', 'bitbucket', 'brave', 'bufferoverun', 'builtwith',
-  'censys', 'certspotter', 'chaos', 'commoncrawl', 'criminalip', 'crtsh', 'dehashed',
-  'dnsdumpster', 'duckduckgo', 'dymo', 'fofa', 'fullhunt', 'github-code', 'gitlab',
-  'hackertarget', 'haveibeenpwned', 'hudsonrock', 'hunter', 'hunterhow', 'intelx', 'leakix',
-  'leaklookup', 'linkedin', 'linkedin_links', 'mojeek', 'netcraft', 'netlas', 'omnisint',
-  'onyphe', 'otx', 'pentesttools', 'projectdiscovery', 'rapiddns', 'robtex', 'rocketreach',
-  'securityscorecard', 'securityTrails', 'sherlockeye', 'shodan', 'shodanInternetDB',
-  'subdomaincenter', 'subdomainfinderc99', 'sublist3r', 'thc', 'threatcrowd', 'threatminer',
-  'tomba', 'urlscan', 'venacus', 'virustotal', 'waybackarchive', 'whoisxml', 'windvane',
-  'yahoo', 'zoomeye', 'zoomeyeapi'
+const SOURCES = ['anubis', 'baidu', 'bevigil', 'bing', 'bitbucket', 'brave', 'bufferoverun', 'builtwith', 'censys', 'certspotter', 'chaos', 'commoncrawl', 'criminalip', 'crtsh', 'dehashed', 'dnsdumpster', 'duckduckgo', 'dymo', 'fofa', 'fullhunt', 'github-code', 'gitlab', 'hackertarget', 'haveibeenpwned', 'hudsonrock', 'hunter', 'hunterhow', 'intelx', 'leakix', 'leaklookup', 'linkedin', 'mojeek', 'netcraft', 'netlas', 'onyphe', 'otx', 'pentesttools', 'projectdiscovery', 'rapiddns', 'robtex', 'rocketreach', 'securityscorecard', 'securityTrails', 'shodan', 'shodanInternetDB', 'subdomaincenter', 'subdomainfinderc99', 'threatminer', 'tomba', 'urlscan', 'venacus', 'virustotal', 'waybackarchive', 'whoisxml', 'windvane', 'yahoo', 'zoomeye'];
+const RECOMMENDED = ['crtsh', 'dnsdumpster', 'duckduckgo', 'hackertarget', 'otx', 'urlscan', 'rapiddns'];
+
+const NAV_ITEMS = [
+  { id: 'overview', label: 'Overview', icon: '⌂' },
+  { id: 'domain', label: 'Domain OSINT', icon: '◎' },
+  { id: 'dns', label: 'DNS & Certificates', icon: '⌁' },
+  { id: 'shodan', label: 'Shodan Assets', icon: '◈' },
+  { id: 'camera', label: 'Camera Audit', icon: '▣' },
+  { id: 'reports', label: 'Reports', icon: '▤' },
 ];
 
-const RECOMMENDED_PRESET = ['crtsh', 'dnsdumpster', 'duckduckgo', 'hackertarget', 'otx', 'urlscan', 'rapiddns'];
-
-function unique(values) {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
-}
+function unique(values) { return [...new Set(values)].sort((a, b) => a.localeCompare(b)); }
 
 function extractEntities(logs) {
   const text = logs.join('\n');
@@ -33,9 +28,9 @@ function extractEntities(logs) {
   return { emails, hosts, ips, people, urls };
 }
 
-function summarizeLogs(logs) {
+function summarize(logs) {
   const text = logs.join('\n');
-  const count = (patterns) => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
+  const count = patterns => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
   const tagged = logs.filter(line => /\[(SUCCESS|ERROR|WARNING|STDERR)\]/i.test(line));
   return {
     entities: [
@@ -55,40 +50,24 @@ function summarizeLogs(logs) {
 
 function BarChart({ items }) {
   const max = Math.max(...items.map(item => item.value), 1);
-  return (
-    <div className="bar-chart">
-      {items.map(item => (
-        <div className="bar-row" key={item.label}>
-          <span>{item.label}</span>
-          <div className="bar-track"><div className="bar-fill" style={{ width: `${item.value ? Math.max((item.value / max) * 100, 7) : 0}%`, background: item.color || 'var(--accent)' }} /></div>
-          <strong>{item.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
+  return <div className="bar-chart">{items.map(item => <div className="bar-row" key={item.label}><span>{item.label}</span><div className="bar-track"><div className="bar-fill" style={{ width: `${item.value ? Math.max((item.value / max) * 100, 7) : 0}%`, background: item.color || 'var(--accent)' }} /></div><strong>{item.value}</strong></div>)}</div>;
 }
 
 function EntityPanel({ title, icon, values }) {
-  return (
-    <article className="entity-panel">
-      <div className="entity-panel-title"><span className="entity-icon">{icon}</span><h3>{title}</h3><b>{values.length}</b></div>
-      {values.length ? (
-        <div className="entity-values">{values.slice(0, 30).map(value => <code key={value}>{value}</code>)}</div>
-      ) : <p className="empty-state">No values captured in this report.</p>}
-      {values.length > 30 && <small>Showing 30 of {values.length}</small>}
-    </article>
-  );
+  return <article className="entity-panel"><div className="entity-panel-title"><span className="entity-icon">{icon}</span><h3>{title}</h3><b>{values.length}</b></div>{values.length ? <div className="entity-values">{values.slice(0, 30).map(value => <code key={value}>{value}</code>)}</div> : <p className="empty-state">No values captured in this report.</p>}{values.length > 30 && <small>Showing 30 of {values.length}</small>}</article>;
 }
 
 function App() {
+  const [module, setModule] = useState('overview');
   const [apiOnline, setApiOnline] = useState(false);
-  const [apiStatusText, setApiStatusText] = useState('Checking connection');
+  const [apiStatus, setApiStatus] = useState('Checking backend');
+  const [diagnostics, setDiagnostics] = useState(null);
   const [domain, setDomain] = useState('');
   const [domainError, setDomainError] = useState('');
   const [limit, setLimit] = useState(500);
   const [dnsBrute, setDnsBrute] = useState(false);
-  const [selectedSources, setSelectedSources] = useState(RECOMMENDED_PRESET);
-  const [availableSources, setAvailableSources] = useState(FALLBACK_SUPPORTED_SOURCES);
+  const [selectedSources, setSelectedSources] = useState(RECOMMENDED);
+  const [availableSources, setAvailableSources] = useState(SOURCES);
   const [sourceSearch, setSourceSearch] = useState('');
   const [activePreset, setActivePreset] = useState('recommended');
   const [currentJobId, setCurrentJobId] = useState(null);
@@ -96,295 +75,134 @@ function App() {
   const [currentStatus, setCurrentStatus] = useState('Idle');
   const [exitCode, setExitCode] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [consoleLogs, setConsoleLogs] = useState(['Ready for a passive collection job.']);
+  const [consoleLogs, setConsoleLogs] = useState(['Ready for an authorized passive collection job.']);
   const [recentJobs, setRecentJobs] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeView, setActiveView] = useState('scan');
-  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
-  const terminalBodyRef = useRef(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [cameraChecks, setCameraChecks] = useState({ ownership: false, exposure: false, auth: false, firmware: false, tls: false, network: false });
+  const terminalRef = useRef(null);
   const wsRef = useRef(null);
 
   const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
   const apiHost = host && host !== 'localhost' ? host : '127.0.0.1';
-  const API_BASE = `http://${apiHost}:8000`;
-  const WS_BASE = `ws://${apiHost}:8000`;
-
-  const chartLogs = useMemo(() => consoleLogs.filter(line => !line.startsWith('[CONNECTION]')), [consoleLogs]);
-  const chartStats = useMemo(() => summarizeLogs(chartLogs), [chartLogs]);
-  const extractedEntities = useMemo(() => extractEntities(chartLogs), [chartLogs]);
+  const API = `http://${apiHost}:8000`;
+  const WS = `ws://${apiHost}:8000`;
   const filteredSources = useMemo(() => availableSources.filter(source => source.toLowerCase().includes(sourceSearch.toLowerCase())), [availableSources, sourceSearch]);
-  const totalEntities = Object.values(extractedEntities).reduce((sum, values) => sum + values.length, 0);
+  const cleanLogs = useMemo(() => consoleLogs.filter(line => !line.startsWith('[CONNECTION]')), [consoleLogs]);
+  const stats = useMemo(() => summarize(cleanLogs), [cleanLogs]);
+  const entities = useMemo(() => extractEntities(cleanLogs), [cleanLogs]);
+  const entityCount = Object.values(entities).reduce((sum, values) => sum + values.length, 0);
 
   useEffect(() => {
-    checkHealthAndSources();
-    fetchRecentJobs();
-    const timer = window.setInterval(checkHealthAndSources, 15000);
-    return () => {
-      window.clearInterval(timer);
-      if (wsRef.current) wsRef.current.close();
-    };
+    checkBackend();
+    loadJobs();
+    const timer = window.setInterval(checkBackend, 15000);
+    return () => { window.clearInterval(timer); if (wsRef.current) wsRef.current.close(); };
   }, []);
 
-  useEffect(() => {
-    if (isAutoScrollEnabled && terminalBodyRef.current) terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight;
-  }, [consoleLogs, isAutoScrollEnabled]);
+  useEffect(() => { if (autoScroll && terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight; }, [consoleLogs, autoScroll]);
 
-  async function checkHealthAndSources() {
+  async function checkBackend() {
     try {
-      const response = await fetch(`${API_BASE}/api/health`);
-      setApiOnline(response.ok);
-      setApiStatusText(response.ok ? 'API connected' : 'API returned an error');
-    } catch {
-      setApiOnline(false);
-      setApiStatusText('API offline');
-    }
-    try {
-      const response = await fetch(`${API_BASE}/api/sources`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.sources) setAvailableSources(data.sources);
-      }
-    } catch {
-      // Keep the local fallback list when the API is unavailable.
-    }
+      const health = await fetch(`${API}/api/health`);
+      setApiOnline(health.ok);
+      setApiStatus(health.ok ? 'Backend connected' : 'Backend error');
+      const sourceResponse = await fetch(`${API}/api/sources`);
+      if (sourceResponse.ok) setAvailableSources((await sourceResponse.json()).sources || SOURCES);
+      const diagResponse = await fetch(`${API}/api/diagnostics`);
+      if (diagResponse.ok) setDiagnostics(await diagResponse.json());
+    } catch { setApiOnline(false); setApiStatus('Backend offline'); }
   }
 
-  async function fetchRecentJobs() {
-    try {
-      const response = await fetch(`${API_BASE}/api/jobs`);
-      if (response.ok) {
-        const data = await response.json();
-        setRecentJobs(data.jobs || []);
-      }
-    } catch {
-      // History is in-memory and is optional to the scan workspace.
-    }
+  async function loadJobs() {
+    try { const response = await fetch(`${API}/api/jobs`); if (response.ok) setRecentJobs((await response.json()).jobs || []); } catch { /* in-memory history is optional */ }
   }
 
-  function validateDomain(value) {
-    const candidate = value.trim().toLowerCase();
-    if (!candidate) return 'Enter a target domain.';
-    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(candidate)) return 'Use a valid domain such as example.com.';
-    return '';
+  function validate(value) {
+    if (!value.trim()) return 'Enter a target domain.';
+    return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value.trim()) ? '' : 'Use a valid domain such as example.com.';
   }
 
   function toggleSource(source) {
     setActivePreset('custom');
-    if (source === 'all') {
-      if (selectedSources.includes('all')) {
-        setSelectedSources(RECOMMENDED_PRESET);
-        setActivePreset('recommended');
-      } else setSelectedSources(['all']);
-      return;
-    }
+    if (source === 'all') { setSelectedSources(selectedSources.includes('all') ? RECOMMENDED : ['all']); setActivePreset(selectedSources.includes('all') ? 'recommended' : 'all'); return; }
     setSelectedSources(current => current.includes('all') ? [source] : current.includes(source) ? current.filter(item => item !== source) : [...current, source]);
   }
 
-  function applyPreset(preset) {
-    setActivePreset(preset);
-    if (preset === 'recommended') setSelectedSources(RECOMMENDED_PRESET);
-    if (preset === 'all') setSelectedSources(['all']);
-    if (preset === 'clear') setSelectedSources([]);
-  }
+  function preset(value) { setActivePreset(value); setSelectedSources(value === 'recommended' ? RECOMMENDED : value === 'all' ? ['all'] : []); }
 
-  async function pollJobResult(jobId, attempt = 0) {
-    if (attempt >= 120) {
-      setCurrentStatus('Error');
-      setErrorMessage('Result polling timed out. Check the backend terminal.');
-      setIsSubmitting(false);
-      return;
-    }
+  async function pollResult(jobId, attempt = 0) {
+    if (attempt >= 120) { setCurrentStatus('Error'); setErrorMessage('Result polling timed out. Check the backend terminal.'); setIsSubmitting(false); return; }
     try {
-      const response = await fetch(`${API_BASE}/api/scan/${jobId}/result`);
+      const response = await fetch(`${API}/api/scan/${jobId}/result`);
       if (!response.ok) throw new Error(`Result endpoint returned ${response.status}`);
       const data = await response.json();
-      setConsoleLogs(data.output_lines || []);
-      setCurrentStatus(data.status);
-      setExitCode(data.exit_code);
-      setErrorMessage(data.error_message || null);
-      if (data.status === 'Running' || data.status === 'Queued') window.setTimeout(() => pollJobResult(jobId, attempt + 1), 1000);
-      else {
-        setIsSubmitting(false);
-        fetchRecentJobs();
-      }
-    } catch (error) {
-      setErrorMessage(error.message || 'Could not retrieve the scan result.');
-      setIsSubmitting(false);
-    }
+      setConsoleLogs(data.output_lines || []); setCurrentStatus(data.status); setExitCode(data.exit_code); setErrorMessage(data.error_message || null);
+      if (data.status === 'Running' || data.status === 'Queued') window.setTimeout(() => pollResult(jobId, attempt + 1), 1000); else { setIsSubmitting(false); loadJobs(); }
+    } catch (error) { setErrorMessage(error.message); setIsSubmitting(false); }
   }
 
-  function connectWebSocket(jobId) {
+  function connectStream(jobId) {
     if (wsRef.current) wsRef.current.close();
-    const socket = new WebSocket(`${WS_BASE}/api/scan/${jobId}/stream`);
-    wsRef.current = socket;
-    let settled = false;
-    let fallbackStarted = false;
-    const startFallback = () => {
-      if (fallbackStarted || settled) return;
-      fallbackStarted = true;
-      setConsoleLogs(previous => [...previous.filter(line => !line.startsWith('[CONNECTION]')), '[CONNECTION] Live stream unavailable; using result polling.']);
-      pollJobResult(jobId);
-    };
-    socket.onmessage = event => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'command') setCurrentCommand(payload.data);
-        if (payload.type === 'status') setCurrentStatus(payload.status);
-        if (payload.type === 'output') setConsoleLogs(previous => [...previous, payload.data]);
-        if (payload.type === 'done') {
-          settled = true;
-          setCurrentStatus(payload.status);
-          setExitCode(payload.exit_code);
-          setErrorMessage(payload.error_message || null);
-          setIsSubmitting(false);
-          fetchRecentJobs();
-        }
-      } catch {
-        setConsoleLogs(previous => [...previous, event.data]);
-      }
-    };
-    socket.onerror = startFallback;
-    socket.onclose = () => { if (!settled) startFallback(); };
+    const socket = new WebSocket(`${WS}/api/scan/${jobId}/stream`); wsRef.current = socket;
+    let fallback = false; let finished = false;
+    const startFallback = () => { if (fallback || finished) return; fallback = true; setConsoleLogs(previous => [...previous.filter(line => !line.startsWith('[CONNECTION]')), '[CONNECTION] Live stream unavailable; using result polling.']); pollResult(jobId); };
+    socket.onmessage = event => { try { const payload = JSON.parse(event.data); if (payload.type === 'command') setCurrentCommand(payload.data); if (payload.type === 'status') setCurrentStatus(payload.status); if (payload.type === 'output') setConsoleLogs(previous => [...previous, payload.data]); if (payload.type === 'done') { finished = true; setCurrentStatus(payload.status); setExitCode(payload.exit_code); setErrorMessage(payload.error_message || null); setIsSubmitting(false); loadJobs(); } } catch { setConsoleLogs(previous => [...previous, event.data]); } };
+    socket.onerror = startFallback; socket.onclose = () => { if (!finished) startFallback(); };
   }
 
-  async function handleStartScan(event) {
-    event.preventDefault();
-    const validationError = validateDomain(domain);
-    setDomainError(validationError);
-    if (validationError || !selectedSources.length) return;
-    setIsSubmitting(true);
-    setActiveView('scan');
-    setCurrentStatus('Queued');
-    setExitCode(null);
-    setErrorMessage(null);
-    setConsoleLogs([]);
+  async function runScan(event) {
+    event.preventDefault(); const validation = validate(domain); setDomainError(validation); if (validation || !selectedSources.length) return;
+    setModule('domain'); setIsSubmitting(true); setCurrentStatus('Queued'); setExitCode(null); setErrorMessage(null); setConsoleLogs([]);
     try {
-      const response = await fetch(`${API_BASE}/api/scan`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: domain.trim(), sources: selectedSources, limit: Number(limit), dns_brute: Boolean(dnsBrute) })
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || `Backend returned ${response.status}`);
-      }
-      const data = await response.json();
-      setCurrentJobId(data.job_id);
-      setCurrentCommand(data.command_str || `theHarvester -d ${domain.trim()}`);
-      connectWebSocket(data.job_id);
-    } catch (error) {
-      setCurrentStatus('Error');
-      setErrorMessage(error.message || 'Could not start the scan.');
-      setConsoleLogs([`[ERROR] ${error.message || 'Could not start the scan.'}`]);
-      setIsSubmitting(false);
-    }
+      const response = await fetch(`${API}/api/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: domain.trim(), sources: selectedSources, limit: Number(limit), dns_brute: Boolean(dnsBrute) }) });
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.detail || `Backend returned ${response.status}`); }
+      const data = await response.json(); setCurrentJobId(data.job_id); setCurrentCommand(data.command_str || `theHarvester -d ${domain.trim()}`); connectStream(data.job_id);
+    } catch (error) { setCurrentStatus('Error'); setErrorMessage(error.message); setConsoleLogs([`[ERROR] ${error.message}`]); setIsSubmitting(false); }
   }
 
-  async function selectJob(job) {
-    setActiveView('scan');
-    setCurrentJobId(job.job_id);
-    setDomain(job.domain);
-    setSelectedSources(job.sources);
-    setLimit(job.limit);
-    setDnsBrute(job.dns_brute);
-    setCurrentCommand(job.command_str || `theHarvester -d ${job.domain}`);
-    setCurrentStatus(job.status);
-    setExitCode(job.exit_code);
-    setErrorMessage(null);
-    try {
-      const response = await fetch(`${API_BASE}/api/scan/${job.job_id}/result`);
-      const data = await response.json();
-      setConsoleLogs(data.output_lines || []);
-      if (data.status === 'Running' || data.status === 'Queued') connectWebSocket(job.job_id);
-    } catch {
-      setConsoleLogs(['[ERROR] Could not load this scan result.']);
-    }
+  async function openJob(job) {
+    setModule('domain'); setCurrentJobId(job.job_id); setDomain(job.domain); setSelectedSources(job.sources); setLimit(job.limit); setDnsBrute(job.dns_brute); setCurrentCommand(job.command_str || `theHarvester -d ${job.domain}`); setCurrentStatus(job.status); setExitCode(job.exit_code);
+    try { const data = await (await fetch(`${API}/api/scan/${job.job_id}/result`)).json(); setConsoleLogs(data.output_lines || []); if (data.status === 'Running' || data.status === 'Queued') connectStream(job.job_id); } catch { setConsoleLogs(['[ERROR] Could not load this report.']); }
   }
 
-  function downloadReport() {
-    if (currentJobId) window.open(`${API_BASE}/api/scan/${currentJobId}/download`, '_blank');
-    else {
-      const blob = new Blob([consoleLogs.join('\n')], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `theHarvester_${domain || 'report'}.txt`;
-      link.click();
-      URL.revokeObjectURL(url);
-    }
-  }
+  function logClass(line) { if (/\[(ERROR|STDERR)\]/i.test(line)) return 'log-danger'; if (/\[WARNING\]|\[!\]/i.test(line)) return 'log-warning'; if (/\[SUCCESS\]|\[\+\]|Found /i.test(line)) return 'log-success'; return ''; }
+  function exportReport() { if (currentJobId) window.open(`${API}/api/scan/${currentJobId}/download`, '_blank'); }
 
-  function copyCommand() {
-    navigator.clipboard?.writeText(currentCommand);
-  }
+  const moduleTitle = NAV_ITEMS.find(item => item.id === module)?.label || 'Settings';
 
-  function logClass(line) {
-    if (/\[(ERROR|STDERR)\]/i.test(line)) return 'log-danger';
-    if (/\[WARNING\]|\[!\]/i.test(line)) return 'log-warning';
-    if (/\[SUCCESS\]|\[\+\]|Found /i.test(line)) return 'log-success';
-    if (/^theHarvester|^\$/i.test(line)) return 'log-command';
-    return '';
-  }
-
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-block"><div className="brand-mark">H</div><div><strong>Harvester</strong><span>OSINT workspace</span></div></div>
-        <div className="sidebar-section-label">Workspace</div>
-        <nav className="main-nav">
-          <button className={activeView === 'scan' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveView('scan')}><span>⌁</span>Scan workspace</button>
-          <button className={activeView === 'history' ? 'nav-item active' : 'nav-item'} onClick={() => { setActiveView('history'); fetchRecentJobs(); }}><span>◷</span>Scan history</button>
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="scope-note"><span className="scope-dot" />Passive collection only</div>
-          <p>Use this workspace only for domains and assets you own or are authorized to assess.</p>
-          <div className="sidebar-version">Local operator console <span>v1.0</span></div>
-        </div>
-      </aside>
-
-      <main className="main-shell">
-        <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> {activeView === 'scan' ? 'Scan' : 'History'}</div><div className={apiOnline ? 'connection-pill online' : 'connection-pill'}><span />{apiStatusText}</div></header>
-
-        <section className="page-intro">
-          <div><div className="overline">Passive intelligence console</div><h1>{activeView === 'scan' ? 'Investigate an external footprint.' : 'Review recent investigations.'}</h1><p>{activeView === 'scan' ? 'Collect public domain intelligence from approved sources, then review the evidence in one focused workspace.' : 'Select a completed job to reopen its captured output and extracted entities.'}</p></div>
-          <div className="intro-stat"><span>Current target</span><strong>{domain || 'No target selected'}</strong><small>{currentStatus} {currentJobId ? `· ${currentJobId.slice(0, 8)}` : ''}</small></div>
-        </section>
-
-        {activeView === 'history' ? (
-          <section className="history-view card-surface"><div className="section-heading"><div><span className="overline">Stored in this session</span><h2>Recent scan jobs</h2></div><button className="button secondary" onClick={fetchRecentJobs}>Refresh</button></div>{recentJobs.length ? <div className="history-list">{recentJobs.map(job => <button className="history-row" key={job.job_id} onClick={() => selectJob(job)}><span className="history-domain">{job.domain}<small>{new Date(job.created_at * 1000).toLocaleString()}</small></span><span>{job.sources.includes('all') ? 'All sources' : `${job.sources.length} sources`}</span><span className={`status-tag ${job.status.toLowerCase()}`}>{job.status}</span><span className="history-arrow">→</span></button>)}</div> : <div className="large-empty">No scan jobs are stored in memory yet.</div>}</section>
-        ) : (
-          <div className="workspace-grid">
-            <section className="config-column">
-              <div className="card-surface config-card"><div className="section-heading compact"><div><span className="overline">Step 01</span><h2>Configure collection</h2></div><span className="step-badge">Passive</span></div>
-                <form onSubmit={handleStartScan}>
-                  <label className="field-label">Target domain <span>Required</span></label>
-                  <input className={domainError ? 'field-input invalid' : 'field-input'} value={domain} onChange={event => { setDomain(event.target.value); setDomainError(validateDomain(event.target.value)); }} placeholder="example.com" autoComplete="off" />
-                  {domainError && <p className="field-error">{domainError}</p>}
-                  <div className="field-row"><div><label className="field-label">Result limit</label><input className="field-input" type="number" min="1" max="5000" value={limit} onChange={event => setLimit(event.target.value)} /></div><label className={dnsBrute ? 'toggle-card checked' : 'toggle-card'}><input type="checkbox" checked={dnsBrute} onChange={event => setDnsBrute(event.target.checked)} /><span><b>DNS brute force</b><small>Enumerate likely subdomains</small></span><i>{dnsBrute ? 'On' : 'Off'}</i></label></div>
-                  <div className="sources-heading"><label className="field-label">Sources <span>{selectedSources.includes('all') ? 'All selected' : `${selectedSources.length} selected`}</span></label><div className="preset-row"><button type="button" className={activePreset === 'recommended' ? 'preset active' : 'preset'} onClick={() => applyPreset('recommended')}>Recommended</button><button type="button" className={activePreset === 'all' ? 'preset active' : 'preset'} onClick={() => applyPreset('all')}>All</button><button type="button" className="preset" onClick={() => applyPreset('clear')}>Clear</button></div></div>
-                  <input className="search-input" value={sourceSearch} onChange={event => setSourceSearch(event.target.value)} placeholder="Search sources" />
-                  <div className="source-list"><label className={selectedSources.includes('all') ? 'source-option selected' : 'source-option'}><input type="checkbox" checked={selectedSources.includes('all')} onChange={() => toggleSource('all')} /><span>All supported sources</span></label>{filteredSources.map(source => <label className={selectedSources.includes('all') || selectedSources.includes(source) ? 'source-option selected' : 'source-option'} key={source}><input type="checkbox" checked={selectedSources.includes('all') || selectedSources.includes(source)} disabled={selectedSources.includes('all')} onChange={() => toggleSource(source)} /><span>{source}</span></label>)}</div>
-                  <button className="button primary launch-button" type="submit" disabled={isSubmitting || !!domainError || !domain.trim() || !selectedSources.length}><span>{isSubmitting ? 'Running collection…' : 'Start passive collection'}</span><b>↗</b></button>
-                </form>
-              </div>
-            </section>
-
-            <section className="results-column">
-              <div className="result-header card-surface"><div><span className="overline">Step 02 · Live evidence</span><h2>{domain || 'Awaiting a target'}</h2><div className="command-line"><span>$</span>{currentCommand}</div></div><div className="result-actions"><span className={`status-tag ${currentStatus.toLowerCase()}`}>{currentStatus}{exitCode !== null ? ` · ${exitCode}` : ''}</span><button className="icon-button" onClick={copyCommand} title="Copy command">Copy</button><button className="button secondary small" onClick={downloadReport}>Export report</button></div></div>
-              {errorMessage && <div className="alert-card"><span>!</span><div><b>Collection needs attention</b><p>{errorMessage}</p></div></div>}
-              <div className="metric-grid"><div className="metric-card"><span>Captured entities</span><strong>{totalEntities}</strong><small>Unique values</small></div><div className="metric-card"><span>Output lines</span><strong>{chartStats.totalLines}</strong><small>From live report</small></div><div className="metric-card"><span>Sources selected</span><strong>{selectedSources.includes('all') ? 'All' : selectedSources.length}</strong><small>Configured engines</small></div><div className="metric-card"><span>Scan state</span><strong className="metric-state">{currentStatus}</strong><small>{apiOnline ? 'Backend reachable' : 'Check backend'}</small></div></div>
-
-              <div className="terminal-card card-surface"><div className="terminal-heading"><div><span className="overline">Live output</span><h3>Collection stream</h3></div><span className="terminal-meta">{chartStats.totalLines} lines</span></div><div className="terminal-body" ref={terminalBodyRef} onScroll={() => { if (!terminalBodyRef.current) return; const distance = terminalBodyRef.current.scrollHeight - terminalBodyRef.current.scrollTop - terminalBodyRef.current.clientHeight; setIsAutoScrollEnabled(distance < 45); }}>{consoleLogs.map((line, index) => <div className={`log-line ${logClass(line)}`} key={`${index}-${line}`}>{line}</div>)}{currentStatus === 'Running' && <div className="log-line log-live"><span />Waiting for provider output…</div>}</div>{!isAutoScrollEnabled && <button className="resume-button" onClick={() => { setIsAutoScrollEnabled(true); terminalBodyRef.current.scrollTop = terminalBodyRef.current.scrollHeight; }}>Resume live view</button>}</div>
-
-              <div className="insights-heading"><div><span className="overline">Step 03 · Review</span><h2>Collected intelligence</h2></div><span className="insight-note">Only values found in the report are shown</span></div>
-              <div className="entity-grid"><EntityPanel title="Email addresses" icon="@" values={extractedEntities.emails} /><EntityPanel title="Hosts & domains" icon="◇" values={extractedEntities.hosts} /><EntityPanel title="IP addresses" icon="#" values={extractedEntities.ips} /><EntityPanel title="People" icon="◌" values={extractedEntities.people} /><EntityPanel title="URLs" icon="↗" values={extractedEntities.urls} /></div>
-              <div className="analytics-grid"><div className="analytics-card card-surface"><div className="analytics-title"><div><span className="overline">Distribution</span><h3>Report indicators</h3></div></div><BarChart items={chartStats.entities} /></div><div className="analytics-card card-surface"><div className="analytics-title"><div><span className="overline">Health</span><h3>Provider events</h3></div></div><BarChart items={chartStats.events} /></div></div>
-            </section>
-          </div>
-        )}
-        <footer className="app-footer">Harvester OSINT workspace <span>·</span> Passive, authorized collection only <span>·</span> Local session</footer>
-      </main>
-    </div>
-  );
+  return <div className="app-shell">
+    <aside className="sidebar"><div className="brand-block"><div className="brand-mark">H</div><div><strong>Harvester</strong><span>Security workspace</span></div></div><div className="sidebar-section-label">Modules</div><nav className="main-nav">{NAV_ITEMS.map(item => <button key={item.id} className={module === item.id ? 'nav-item active' : 'nav-item'} onClick={() => setModule(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav><button className={module === 'settings' ? 'nav-item settings-link active' : 'nav-item settings-link'} onClick={() => setModule('settings')}><span>⚙</span>Settings</button><div className="sidebar-bottom"><div className="scope-note"><span className="scope-dot" />Authorized use only</div><p>Passive metadata collection for approved domains and assets.</p><div className="sidebar-version">Local operator console <span>v2.0</span></div></div></aside>
+    <main className="main-shell"><header className="topbar"><div className="breadcrumb">Harvester <span>/</span> {moduleTitle}</div><div className={apiOnline ? 'connection-pill online' : 'connection-pill'}><span />{apiStatus}</div></header>
+      <section className="page-intro"><div><div className="overline">Security intelligence workspace</div><h1>{module === 'overview' ? 'Understand your public footprint.' : moduleTitle}</h1><p>{module === 'overview' ? 'Run focused, passive assessments and turn public signals into clear evidence.' : module === 'camera' ? 'Review hardening controls for cameras in your approved inventory.' : 'A focused workspace for authorized, evidence-based assessment.'}</p></div><div className="intro-stat"><span>Active target</span><strong>{domain || 'No target selected'}</strong><small>{currentStatus}{currentJobId ? ` · ${currentJobId.slice(0, 8)}` : ''}</small></div></section>
+      {module === 'overview' && <Overview recentJobs={recentJobs} stats={stats} entityCount={entityCount} apiOnline={apiOnline} onNavigate={setModule} onJob={openJob} />}
+      {module === 'domain' && <DomainModule domain={domain} setDomain={value => { setDomain(value); setDomainError(validate(value)); }} domainError={domainError} limit={limit} setLimit={setLimit} dnsBrute={dnsBrute} setDnsBrute={setDnsBrute} selectedSources={selectedSources} toggleSource={toggleSource} sourceSearch={sourceSearch} setSourceSearch={setSourceSearch} filteredSources={filteredSources} activePreset={activePreset} preset={preset} runScan={runScan} isSubmitting={isSubmitting} currentCommand={currentCommand} currentStatus={currentStatus} exitCode={exitCode} errorMessage={errorMessage} consoleLogs={consoleLogs} terminalRef={terminalRef} autoScroll={autoScroll} setAutoScroll={setAutoScroll} logClass={logClass} stats={stats} entities={entities} exportReport={exportReport} />}
+      {module === 'dns' && <DnsModule target={domain} setTarget={setDomain} onOpenDomain={() => setModule('domain')} />}
+      {module === 'shodan' && <ShodanModule target={domain} setTarget={setDomain} authorized={apiOnline} onReview={() => { setSelectedSources(['shodan']); setActivePreset('custom'); setModule('domain'); }} diagnostics={diagnostics} />}
+      {module === 'camera' && <CameraModule checks={cameraChecks} setChecks={setCameraChecks} />}
+      {module === 'reports' && <ReportsModule recentJobs={recentJobs} onJob={openJob} stats={stats} entities={entities} exportReport={exportReport} />}
+      {module === 'settings' && <SettingsModule apiOnline={apiOnline} apiStatus={apiStatus} diagnostics={diagnostics} onRefresh={checkBackend} />}
+      <footer className="app-footer">Harvester <span>·</span> Passive authorized collection <span>·</span> Local session</footer>
+    </main>
+  </div>;
 }
+
+function Overview({ recentJobs, stats, entityCount, apiOnline, onNavigate, onJob }) {
+  return <section className="overview-page"><div className="overview-hero card-surface"><div><span className="overline">Workspace overview</span><h2>One place for public evidence.</h2><p>Start with a domain assessment, review authorized assets, or inspect a previous report.</p></div><button className="button primary" onClick={() => onNavigate('domain')}>Start a domain scan <b>→</b></button></div><div className="overview-metrics"><Metric label="Unique entities" value={entityCount} note="Current report" /><Metric label="Captured lines" value={stats.totalLines} note="Live evidence" /><Metric label="Jobs this session" value={recentJobs.length} note="In-memory history" /><Metric label="Backend" value={apiOnline ? 'Ready' : 'Offline'} note="Connection state" /></div><div className="overview-grid"><section className="card-surface overview-card"><div className="section-heading"><div><span className="overline">Choose a workflow</span><h2>Assessment modules</h2></div></div><div className="workflow-grid"><Workflow icon="◎" title="Domain OSINT" text="Emails, hosts, IPs, URLs and provider evidence." onClick={() => onNavigate('domain')} /><Workflow icon="◈" title="Shodan assets" text="Passive service metadata for approved assets." onClick={() => onNavigate('shodan')} /><Workflow icon="⌁" title="DNS & certificates" text="Inventory public DNS and certificate signals." onClick={() => onNavigate('dns')} /><Workflow icon="▣" title="Camera audit" text="Review hardening controls in your inventory." onClick={() => onNavigate('camera')} /></div></section><section className="card-surface overview-card"><div className="section-heading"><div><span className="overline">Recent activity</span><h2>Latest jobs</h2></div><button className="text-button" onClick={() => onNavigate('reports')}>View all →</button></div>{recentJobs.length ? <div className="mini-job-list">{recentJobs.slice(0, 5).map(job => <button className="mini-job" key={job.job_id} onClick={() => onJob(job)}><span><b>{job.domain}</b><small>{new Date(job.created_at * 1000).toLocaleString()}</small></span><span className={`status-tag ${job.status.toLowerCase()}`}>{job.status}</span></button>)}</div> : <div className="large-empty">No scan jobs in this session.</div>}</section></div></section>;
+}
+function Metric({ label, value, note }) { return <div className="metric-card"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
+function Workflow({ icon, title, text, onClick }) { return <button className="workflow-card" onClick={onClick}><span className="workflow-icon">{icon}</span><span><b>{title}</b><small>{text}</small></span><i>→</i></button>; }
+
+function DomainModule({ domain, setDomain, domainError, limit, setLimit, dnsBrute, setDnsBrute, selectedSources, toggleSource, sourceSearch, setSourceSearch, filteredSources, activePreset, preset, runScan, isSubmitting, currentCommand, currentStatus, exitCode, errorMessage, consoleLogs, terminalRef, autoScroll, setAutoScroll, logClass, stats, entities, exportReport }) {
+  return <section className="domain-page"><div className="module-banner card-surface"><div><span className="overline">Domain OSINT</span><h2>Collect public domain intelligence.</h2><p>Use passive sources to build a reviewable evidence set for an authorized target.</p></div><div className="banner-note"><span className="scope-dot" />No active exploitation</div></div><div className="domain-layout"><form className="card-surface config-card" onSubmit={runScan}><div className="section-heading compact"><div><span className="overline">Step 01</span><h2>Collection setup</h2></div><span className="step-badge">Passive</span></div><label className="field-label">Target domain <span>Required</span></label><input className={domainError ? 'field-input invalid' : 'field-input'} value={domain} onChange={event => setDomain(event.target.value)} placeholder="example.com" />{domainError && <p className="field-error">{domainError}</p>}<div className="field-row"><div><label className="field-label">Result limit</label><input className="field-input" type="number" min="1" max="5000" value={limit} onChange={event => setLimit(event.target.value)} /></div><label className={dnsBrute ? 'toggle-card checked' : 'toggle-card'}><input type="checkbox" checked={dnsBrute} onChange={event => setDnsBrute(event.target.checked)} /><span><b>DNS brute force</b><small>Enumerate likely subdomains</small></span><i>{dnsBrute ? 'On' : 'Off'}</i></label></div><div className="sources-heading"><label className="field-label">Sources <span>{selectedSources.includes('all') ? 'All selected' : `${selectedSources.length} selected`}</span></label><div className="preset-row"><button type="button" className={activePreset === 'recommended' ? 'preset active' : 'preset'} onClick={() => preset('recommended')}>Recommended</button><button type="button" className={activePreset === 'all' ? 'preset active' : 'preset'} onClick={() => preset('all')}>All</button><button type="button" className="preset" onClick={() => preset('clear')}>Clear</button></div></div><input className="search-input" value={sourceSearch} onChange={event => setSourceSearch(event.target.value)} placeholder="Search sources" /><div className="source-list"><label className={selectedSources.includes('all') ? 'source-option selected' : 'source-option'}><input type="checkbox" checked={selectedSources.includes('all')} onChange={() => toggleSource('all')} /><span>All supported sources</span></label>{filteredSources.map(source => <label className={selectedSources.includes('all') || selectedSources.includes(source) ? 'source-option selected' : 'source-option'} key={source}><input type="checkbox" checked={selectedSources.includes('all') || selectedSources.includes(source)} disabled={selectedSources.includes('all')} onChange={() => toggleSource(source)} /><span>{source}</span></label>)}</div><button className="button primary launch-button" type="submit" disabled={isSubmitting || !!domainError || !domain.trim() || !selectedSources.length}>{isSubmitting ? 'Running collection…' : 'Start passive collection'}<b>↗</b></button></form><div className="domain-results"><div className="result-header card-surface"><div><span className="overline">Step 02 · Evidence</span><h2>{domain || 'Awaiting target'}</h2><div className="command-line"><span>$</span>{currentCommand}</div></div><div className="result-actions"><span className={`status-tag ${currentStatus.toLowerCase()}`}>{currentStatus}{exitCode !== null ? ` · ${exitCode}` : ''}</span><button className="button secondary small" onClick={exportReport}>Export report</button></div></div>{errorMessage && <div className="alert-card"><span>!</span><div><b>Collection needs attention</b><p>{errorMessage}</p></div></div>}<div className="metric-grid"><Metric label="Entities" value={Object.values(entities).reduce((sum, values) => sum + values.length, 0)} note="Unique values" /><Metric label="Output lines" value={stats.totalLines} note="Captured report" /><Metric label="Sources" value={selectedSources.includes('all') ? 'All' : selectedSources.length} note="Configured engines" /><Metric label="Status" value={currentStatus} note="Current job" /></div><div className="terminal-card card-surface"><div className="terminal-heading"><div><span className="overline">Live output</span><h3>Collection stream</h3></div><span className="terminal-meta">{stats.totalLines} lines</span></div><div className="terminal-body" ref={terminalRef} onScroll={() => { if (!terminalRef.current) return; setAutoScroll(terminalRef.current.scrollHeight - terminalRef.current.scrollTop - terminalRef.current.clientHeight < 45); }}>{consoleLogs.map((line, index) => <div className={`log-line ${logClass(line)}`} key={`${index}-${line}`}>{line}</div>)}{currentStatus === 'Running' && <div className="log-line log-live"><span />Waiting for provider output…</div>}</div>{!autoScroll && <button className="resume-button" onClick={() => { setAutoScroll(true); terminalRef.current.scrollTop = terminalRef.current.scrollHeight; }}>Resume live view</button>}</div><div className="insights-heading"><div><span className="overline">Step 03 · Review</span><h2>Collected intelligence</h2></div><span className="insight-note">Only values found in the report are shown</span></div><div className="entity-grid"><EntityPanel title="Email addresses" icon="@" values={entities.emails} /><EntityPanel title="Hosts & domains" icon="◇" values={entities.hosts} /><EntityPanel title="IP addresses" icon="#" values={entities.ips} /><EntityPanel title="People" icon="◌" values={entities.people} /><EntityPanel title="URLs" icon="↗" values={entities.urls} /></div><div className="analytics-grid"><div className="analytics-card card-surface"><div className="analytics-title"><span className="overline">Distribution</span><h3>Report indicators</h3></div><BarChart items={stats.entities} /></div><div className="analytics-card card-surface"><div className="analytics-title"><span className="overline">Health</span><h3>Provider events</h3></div><BarChart items={stats.events} /></div></div></div></div></section>;
+}
+
+function DnsModule({ target, setTarget, onOpenDomain }) { return <section className="module-page"><ModuleHeader overline="DNS & certificates" title="Map public naming signals." text="Review DNS records and certificate names through passive collection workflows." /><div className="module-grid"><div className="card-surface tool-card"><span className="tool-number">01</span><h3>Domain inventory</h3><p>Start a Domain OSINT job with certificate transparency and DNS-focused sources.</p><label className="field-label">Authorized domain</label><input className="field-input" value={target} onChange={event => setTarget(event.target.value)} placeholder="example.com" /><button className="button primary" onClick={onOpenDomain}>Open domain workflow →</button></div><div className="card-surface checklist-card"><span className="tool-number">02</span><h3>Review checklist</h3><Check text="Certificate names and expiry" /><Check text="A, AAAA, MX, NS and TXT records" /><Check text="Unexpected subdomains" /><Check text="Third-party services and vendors" /></div></div></section>; }
+function ShodanModule({ target, setTarget, authorized, onReview, diagnostics }) { return <section className="module-page"><ModuleHeader overline="Shodan assets" title="Review approved internet-facing assets." text="Use passive Shodan metadata to understand services belonging to an authorized organization." /><div className="module-grid"><div className="card-surface tool-card"><span className="tool-number">01</span><h3>Authorized asset review</h3><p>Shodan access is limited to passive host metadata. No feed access, login attempts, or arbitrary camera searching.</p><label className="field-label">Organization domain or asset</label><input className="field-input" value={target} onChange={event => setTarget(event.target.value)} placeholder="authorized.example.com" /><label className="confirm-row"><input type="checkbox" defaultChecked={false} /><span>I confirm this asset is owned by or authorized for assessment.</span></label><button className="button primary" disabled={!authorized} onClick={onReview}>Configure Shodan review →</button></div><div className="card-surface checklist-card"><span className="tool-number">02</span><h3>Passive evidence collected</h3><Check text="IP, ASN, organization and hostnames" /><Check text="Open service ports and banners" /><Check text="Product and server metadata" /><Check text="Remediation notes for exposed services" /><p className="small-note">Key status: {diagnostics?.shodan_key_configured ? 'configured' : 'not detected'}</p></div></div></section>; }
+function CameraModule({ checks, setChecks }) { const items = [['ownership', 'Asset ownership confirmed'], ['exposure', 'Public exposure reviewed'], ['auth', 'Authentication settings reviewed'], ['firmware', 'Firmware support status checked'], ['tls', 'HTTPS/TLS configuration reviewed'], ['network', 'Network segmentation reviewed']]; return <section className="module-page"><ModuleHeader overline="Camera security audit" title="Harden cameras in your inventory." text="This checklist is for cameras you own or are explicitly authorized to assess. It never opens feeds or attempts access." /><div className="camera-audit card-surface"><div className="audit-intro"><div><span className="overline">Local audit checklist</span><h2>Security posture</h2></div><span className="audit-score">{Object.values(checks).filter(Boolean).length}/{items.length} reviewed</span></div><div className="audit-list">{items.map(([id, label]) => <label className={checks[id] ? 'audit-row checked' : 'audit-row'} key={id}><input type="checkbox" checked={checks[id]} onChange={() => setChecks(previous => ({ ...previous, [id]: !previous[id] }))} /><span><b>{label}</b><small>{checks[id] ? 'Marked reviewed for this session' : 'Mark after verifying in your authorized inventory'}</small></span><i>{checks[id] ? 'Reviewed' : 'Pending'}</i></label>)}</div></div></section>; }
+function ReportsModule({ recentJobs, onJob, stats, entities, exportReport }) { return <section className="module-page"><ModuleHeader overline="Report center" title="Review and export evidence." text="Reopen session jobs and export the current report for your authorized assessment record." /><div className="report-summary"><Metric label="Current entities" value={Object.values(entities).reduce((sum, values) => sum + values.length, 0)} note="Unique extracted values" /><Metric label="Current lines" value={stats.totalLines} note="Captured output" /><Metric label="Session jobs" value={recentJobs.length} note="In-memory only" /><button className="button primary" onClick={exportReport}>Export current report →</button></div><div className="card-surface reports-card"><div className="section-heading"><div><span className="overline">Session history</span><h2>Recent scan jobs</h2></div></div>{recentJobs.length ? <div className="history-list">{recentJobs.map(job => <button className="history-row" key={job.job_id} onClick={() => onJob(job)}><span className="history-domain">{job.domain}<small>{new Date(job.created_at * 1000).toLocaleString()}</small></span><span>{job.sources.includes('all') ? 'All sources' : `${job.sources.length} sources`}</span><span className={`status-tag ${job.status.toLowerCase()}`}>{job.status}</span><span className="history-arrow">→</span></button>)}</div> : <div className="large-empty">No scan jobs are stored in memory yet.</div>}</div></section>; }
+function SettingsModule({ apiOnline, apiStatus, diagnostics, onRefresh }) { return <section className="module-page"><ModuleHeader overline="Workspace settings" title="Check local runtime readiness." text="Review non-sensitive connection details before starting an authorized assessment." /><div className="settings-grid"><div className="card-surface settings-card"><span className="tool-number">Runtime</span><h3>Backend connection</h3><div className="setting-line"><span>Status</span><b className={apiOnline ? 'setting-good' : 'setting-bad'}>{apiStatus}</b></div><div className="setting-line"><span>Python</span><b>{diagnostics?.python || 'Unavailable'}</b></div><div className="setting-line"><span>Executable</span><b className="setting-path">{diagnostics?.theharvester_executable || 'Not detected'}</b></div><button className="button secondary" onClick={onRefresh}>Refresh diagnostics</button></div><div className="card-surface settings-card"><span className="tool-number">Safety</span><h3>Configuration boundaries</h3><Check text="Passive collection workflow" /><Check text="Authorized target reminder" /><Check text="API keys never shown in UI" /><Check text="No camera feed access" /><p className="small-note">Shodan status: {diagnostics?.shodan_key_configured ? 'configured' : 'not configured'}</p></div></div></section>; }
+function ModuleHeader({ overline, title, text }) { return <div className="module-header"><span className="overline">{overline}</span><h2>{title}</h2><p>{text}</p></div>; }
+function Check({ text }) { return <div className="check-line"><span>✓</span>{text}</div>; }
 
 export default App;
