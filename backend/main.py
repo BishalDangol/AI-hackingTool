@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import shlex
 import shutil
@@ -113,6 +114,33 @@ class ScanRequest(BaseModel):
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy", "service": "theHarvester Browser UI API"}
+
+
+@app.get("/api/diagnostics")
+def diagnostics():
+    """Return non-sensitive runtime details useful for reproducing setup failures."""
+    yaml_candidates = [
+        os.path.expanduser('~/.theHarvester/api-keys.yaml'),
+        '/etc/theHarvester/api-keys.yaml',
+        os.path.join(os.path.dirname(__file__), '..', 'theHarvester', 'data', 'api-keys.yaml'),
+    ]
+    yaml_configured = False
+    for candidate in yaml_candidates:
+        try:
+            with open(candidate, encoding='utf-8') as config_file:
+                content = config_file.read()
+            if "shodan:" in content and "key: ''" not in content:
+                yaml_configured = True
+                break
+        except OSError:
+            continue
+    return {
+        'python': sys.version.split()[0],
+        'theharvester_executable': shutil.which('theHarvester') or shutil.which('theHarvester.exe') or shutil.which('theHarvester.py'),
+        'shodan_key_configured': bool(os.getenv('SHODAN_API_KEY', '').strip()) or yaml_configured,
+        'shodan_key_source': 'environment' if os.getenv('SHODAN_API_KEY', '').strip() else ('yaml' if yaml_configured else None),
+        'safe_scope': 'passive metadata for authorized assets only',
+    }
 
 
 @app.get("/api/sources")

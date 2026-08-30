@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import random
 import ssl
 from pathlib import Path
@@ -218,7 +219,8 @@ class Core:
 
     @staticmethod
     def shodan_key() -> str:
-        return Core._api_key_value('shodan')
+        # Prefer an environment variable so deployments do not need to mount secrets.
+        return os.getenv('SHODAN_API_KEY', '').strip() or Core._api_key_value('shodan')
 
     @staticmethod
     def tomba_key() -> tuple[str, str]:

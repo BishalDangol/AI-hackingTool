@@ -336,3 +336,62 @@ Documentation to setup API keys can be found at - https://github.com/laramies/th
 * whoisxml - 2k queries $50, 5k queries $105
 * windvane - 100 free queries
 * zoomeye - 5 free results/day. 30/results/day $190/yr
+
+## Shodan configuration and troubleshooting
+
+Use Shodan only for passive metadata about domains and infrastructure that you own or are explicitly authorized to assess. Do not use this project to locate, access, or view exposed CCTV cameras.
+
+### Recommended local configuration
+
+Create a local environment variable before starting the backend. The value is read by the Shodan integration and is never returned by the diagnostics endpoint:
+
+```bash
+export SHODAN_API_KEY='paste-your-shodan-key-here'
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Alternatively, place the key in `~/.theHarvester/api-keys.yaml` under `apikeys.shodan.key`. Keep real credentials out of Git. The repository’s `theHarvester/data/api-keys.yaml` is only a non-secret empty template.
+
+### Smooth local startup
+
+In terminal one, install and start the backend:
+
+```bash
+uv sync --all-groups
+export SHODAN_API_KEY='paste-your-shodan-key-here'
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+In terminal two, install and start the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Confirm the backend first at `http://127.0.0.1:8000/api/health`, then inspect `http://127.0.0.1:8000/api/diagnostics`. The diagnostics response intentionally reports only whether a Shodan key is configured, its source (`environment` or `yaml`), the Python version, and the executable path.
+
+### Docker configuration
+
+For Docker Compose, export the key before starting the service:
+
+```bash
+export SHODAN_API_KEY='paste-your-shodan-key-here'
+docker compose up --build
+```
+
+If you prefer YAML configuration, edit a local ignored copy and mount it to `/root/.theHarvester/api-keys.yaml`; do not commit the populated file.
+
+### Capturing a reproducible bug report
+
+Run the following commands and save their output when a scan fails:
+
+```bash
+curl -sS http://127.0.0.1:8000/api/health
+curl -sS http://127.0.0.1:8000/api/diagnostics
+curl -sS http://127.0.0.1:8000/api/sources
+uv run pytest -q
+```
+
+Then record the target domain, selected source names, limit, whether DNS brute force was enabled, the returned `job_id`, the `/api/scan/{job_id}/result` response, and the backend terminal log. Never include `SHODAN_API_KEY` or the contents of a populated `api-keys.yaml` in a bug report.
