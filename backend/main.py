@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import os
 import re
 import shlex
@@ -111,7 +112,45 @@ class ScanRequest(BaseModel):
     dns_brute: bool = Field(default=False)
 
 
-@app.get("/api/health")
+class ShodanAssetRequest(BaseModel):
+    asset: str = Field(min_length=1, max_length=253)
+    authorized: bool = Field(default=False)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+def validate_shodan_asset(asset: str, authorized: bool) -> dict[str, Any]:
+    candidate = asset.strip().lower().rstrip('.')
+    if not authorized:
+        raise HTTPException(status_code=403, detail='Explicit authorization is required before a Shodan asset review.')
+    try:
+        parsed_ip = ipaddress.ip_address(candidate)
+        normalized = str(parsed_ip)
+        kind = 'ip'
+        private = parsed_ip.is_private
+    except ValueError:
+        if not re.fullmatch(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}', candidate):
+            raise HTTPException(status_code=422, detail='Asset must be a valid domain name or IP address.')
+        normalized = candidate
+        kind = 'domain'
+        private = False
+    return {
+        'asset': normalized,
+        'kind': kind,
+        'authorized': True,
+        'private_or_lab_target': private,
+        'scope': 'passive Shodan metadata only',
+        'allowed_evidence': ['hostnames', 'ports', 'service banners', 'products', 'organization', 'ASN'],
+        'excluded_actions': ['camera-feed access', 'authentication attempts', 'exploit execution', 'active port scanning'],
+    }
+
+
+@app.post('/api/modules/shodan-assets/validate')
+def validate_shodan_asset_request(request: ShodanAssetRequest):
+    result = validate_shodan_asset(request.asset, request.authorized)
+    return {**result, 'limit': request.limit, 'next_step': 'Use the Domain OSINT workflow with the shodan source to start a passive review.'}
+
+
+@app.get('/api/health')
 def health_check():
     return {"status": "healthy", "service": "theHarvester Browser UI API"}
 

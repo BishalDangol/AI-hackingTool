@@ -60,3 +60,35 @@ def test_scan_rejects_command_injection_in_domain(monkeypatch):
     )
     assert response.status_code == 400
     assert 'Invalid domain format' in response.json()['detail']
+
+
+def test_shodan_asset_review_requires_explicit_authorization():
+    client = TestClient(backend_main.app)
+    response = client.post('/api/modules/shodan-assets/validate', json={'asset': 'example.com', 'authorized': False})
+    assert response.status_code == 403
+    assert 'authorization' in response.json()['detail'].lower()
+
+
+def test_shodan_asset_review_accepts_authorized_domain_and_returns_safe_scope():
+    client = TestClient(backend_main.app)
+    response = client.post('/api/modules/shodan-assets/validate', json={'asset': 'Example.com.', 'authorized': True})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['asset'] == 'example.com'
+    assert payload['kind'] == 'domain'
+    assert payload['scope'] == 'passive Shodan metadata only'
+    assert 'camera-feed access' in payload['excluded_actions']
+
+
+def test_shodan_asset_review_accepts_authorized_ip():
+    client = TestClient(backend_main.app)
+    response = client.post('/api/modules/shodan-assets/validate', json={'asset': '192.0.2.10', 'authorized': True})
+    assert response.status_code == 200
+    assert response.json()['kind'] == 'ip'
+
+
+def test_shodan_asset_review_rejects_invalid_asset():
+    client = TestClient(backend_main.app)
+    response = client.post('/api/modules/shodan-assets/validate', json={'asset': 'example.com;whoami', 'authorized': True})
+    assert response.status_code == 422
+    assert 'valid domain name or IP' in response.json()['detail']
