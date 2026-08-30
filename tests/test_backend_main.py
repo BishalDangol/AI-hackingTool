@@ -92,3 +92,41 @@ def test_shodan_asset_review_rejects_invalid_asset():
     response = client.post('/api/modules/shodan-assets/validate', json={'asset': 'example.com;whoami', 'authorized': True})
     assert response.status_code == 422
     assert 'valid domain name or IP' in response.json()['detail']
+
+
+def test_strix_inspired_run_views_expose_safe_structured_evidence():
+    job_id = 'fixture-run'
+    backend_main.jobs[job_id] = {
+        'job_id': job_id,
+        'domain': 'example.com',
+        'sources': ['shodan'],
+        'limit': 100,
+        'dns_brute': False,
+        'status': 'Finished',
+        'command_str': 'theHarvester -d example.com -b shodan -l 100',
+        'output_lines': [
+            '[SUCCESS] 1 hosts found',
+            'admin@example.com',
+            '203.0.113.10',
+            'https://example.com:443',
+            'port 443 https',
+            '[WARNING] Invalid response format',
+        ],
+        'exit_code': 0,
+        'error_message': None,
+        'created_at': 1.0,
+        'finished_at': 2.0,
+    }
+    try:
+        client = TestClient(backend_main.app)
+        summary = client.get(f'/api/runs/{job_id}/summary')
+        evidence = client.get(f'/api/runs/{job_id}/evidence')
+        findings = client.get(f'/api/runs/{job_id}/findings')
+        report = client.get(f'/api/runs/{job_id}/report')
+        assert summary.status_code == 200
+        assert summary.json()['entity_counts']['emails'] == 1
+        assert evidence.json()['entities']['ips'] == ['203.0.113.10']
+        assert findings.json()['severity_counts']['low'] == 1
+        assert report.json()['artifacts']['text_report'].endswith(f'/api/scan/{job_id}/download')
+    finally:
+        backend_main.jobs.pop(job_id, None)

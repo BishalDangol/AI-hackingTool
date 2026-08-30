@@ -596,3 +596,94 @@ async def download_scan_result(job_id: str):
         content=output_text,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+# Strix-inspired safe assessment views. These expose evidence and remediation metadata
+# from existing passive jobs; they never execute exploits or active target scans.
+def _run_or_404(run_id: str) -> Dict[str, Any]:
+    run = jobs.get(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail='Assessment run not found.')
+    return run
+
+
+def _extract_run_entities(lines: List[str]) -> Dict[str, List[str]]:
+    text = '\n'.join(line for line in lines if not line.startswith('[CONNECTION]'))
+    unique = lambda values: sorted(set(values), key=str.casefold)
+    emails = unique(re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', text, re.I))
+    ips = unique(re.findall(r'\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b', text))
+    urls = unique([url.rstrip('),.;') for url in re.findall(r'https?://[^\s<>"\']+', text, re.I)])
+    hosts = unique(re.findall(r'\b(?=[a-z0-9.-]{4,253}\b)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b', text, re.I))
+    services = unique([match.strip() for line in lines for match in re.findall(r'\b(?:port\s*\d{1,5}|https?|ssh|ftp|smtp|dns|rdp|mysql|postgres(?:ql)?|mongodb|redis|telnet)\b[^\n]*', line, re.I) if len(match.strip()) < 120])
+    return {'emails': emails, 'hosts': hosts, 'ips': ips, 'urls': urls, 'services': services}
+
+
+def _derive_run_findings(lines: List[str]) -> List[Dict[str, str]]:
+    text = '\n'.join(lines)
+    findings: List[Dict[str, str]] = []
+    if re.search(r'missing api key', text, re.I):
+        findings.append({'id': 'provider-credentials', 'severity': 'medium', 'title': 'Provider credentials are incomplete', 'evidence': 'A configured passive provider reported a missing API key.', 'remediation': 'Configure only the provider credentials required for the authorized assessment.'})
+    if re.search(r'invalid response format|work item.*error|exception occurred|traceback', text, re.I):
+        findings.append({'id': 'provider-diagnostic', 'severity': 'low', 'title': 'Provider returned an unexpected response', 'evidence': 'The captured output contains a provider or parser diagnostic.', 'remediation': 'Review the provider output, update dependencies, or disable that provider for the run.'})
+    if re.search(r'websocket.*unavailable|unsupported upgrade request|live stream unavailable', text, re.I):
+        findings.append({'id': 'stream-fallback', 'severity': 'low', 'title': 'Live stream transport was unavailable', 'evidence': 'The client used the REST result fallback to retrieve the run output.', 'remediation': 'Install the WebSocket dependency in the active virtual environment.'})
+    if re.search(r'no (?:ips|hosts|emails) found', text, re.I):
+        findings.append({'id': 'empty-result', 'severity': 'info', 'title': 'No matching entities were returned', 'evidence': 'TheHarvester reported an empty result for one or more entity types.', 'remediation': 'Compare additional authorized passive sources and review provider coverage.'})
+    return findings
+
+
+def _run_summary(run: Dict[str, Any]) -> Dict[str, Any]:
+    findings = _derive_run_findings(run['output_lines'])
+    severity_counts = {'high': 0, 'medium': 0, 'low': 0, 'info': 0}
+    for finding in findings:
+        severity_counts[finding['severity']] += 1
+    entities = _extract_run_entities(run['output_lines'])
+    return {
+        'run_id': run['job_id'],
+        'name': f"{run['domain']}-{run['job_id'][:8]}",
+        'target': run['domain'],
+        'status': run['status'].lower(),
+        'authorized_scope': 'passive metadata for authorized assets only',
+        'severity_counts': severity_counts,
+        'finding_count': len(findings),
+        'entity_counts': {key: len(value) for key, value in entities.items()},
+        'output_line_count': len(run['output_lines']),
+        'created_at': run['created_at'],
+        'finished_at': run['finished_at'],
+    }
+
+
+@app.get('/api/runs')
+def list_assessment_runs():
+    """Strix-inspired run index backed by the existing in-memory passive jobs."""
+    return {'runs': [_run_summary(run) for run in sorted(jobs.values(), key=lambda item: item['created_at'], reverse=True)[:50]]}
+
+
+@app.get('/api/runs/{run_id}')
+def get_assessment_run(run_id: str):
+    run = _run_or_404(run_id)
+    return {**_run_summary(run), 'command': run['command_str'], 'sources': run['sources'], 'limit': run['limit'], 'dns_brute': run['dns_brute']}
+
+
+@app.get('/api/runs/{run_id}/summary')
+def get_assessment_summary(run_id: str):
+    return _run_summary(_run_or_404(run_id))
+
+
+@app.get('/api/runs/{run_id}/evidence')
+def get_assessment_evidence(run_id: str):
+    run = _run_or_404(run_id)
+    return {'run_id': run_id, 'target': run['domain'], 'entities': _extract_run_entities(run['output_lines']), 'output_lines': run['output_lines']}
+
+
+@app.get('/api/runs/{run_id}/findings')
+def get_assessment_findings(run_id: str):
+    run = _run_or_404(run_id)
+    findings = _derive_run_findings(run['output_lines'])
+    return {'run_id': run_id, 'findings': findings, 'severity_counts': _run_summary(run)['severity_counts']}
+
+
+@app.get('/api/runs/{run_id}/report')
+def get_assessment_report(run_id: str):
+    run = _run_or_404(run_id)
+    return {'run': _run_summary(run), 'findings': _derive_run_findings(run['output_lines']), 'evidence': _extract_run_entities(run['output_lines']), 'artifacts': {'text_report': f'/api/scan/{run_id}/download'}}
