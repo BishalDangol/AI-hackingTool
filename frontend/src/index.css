@@ -415,3 +415,17 @@ button:disabled { cursor: not-allowed; opacity: 0.55; filter: grayscale(100%); }
 .docs-step h3 { margin: 1px 0 4px; font-size: 13px; }
 .docs-step p { margin: 0 0 9px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 @media (max-width: 760px) { .docs-step { grid-template-columns: 26px minmax(0, 1fr); } }
+
+.shodan-result { margin-top: 16px; padding: 22px; }
+.shodan-result .result-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.shodan-result .result-header h2 { margin: 5px 0 4px; font-size: 22px; }
+.shodan-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 18px 0; }
+.shodan-assets-list { display: grid; gap: 8px; }
+.shodan-asset-row { border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: var(--surface-soft); }
+.shodan-asset-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shodan-asset-head strong { color: var(--ink); font-family: var(--mono); font-size: 12px; }
+.shodan-asset-head span { color: var(--muted); font-size: 10px; text-align: right; }
+.shodan-asset-details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 16px; margin-top: 12px; }
+.shodan-asset-details span { color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.45; }
+.shodan-asset-details b { display: block; margin-bottom: 3px; color: var(--faint); font-family: var(--font); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 620px) { .shodan-summary { grid-template-columns: 1fr; } .shodan-asset-head { align-items: flex-start; flex-direction: column; } .shodan-asset-head span { text-align: left; } .shodan-asset-details { grid-template-columns: 1fr; } }

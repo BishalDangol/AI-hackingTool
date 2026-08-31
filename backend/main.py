@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -13,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
+from shodan import APIError as ShodanAPIError, Shodan
 
 app = FastAPI(
     title="theHarvester Browser UI API",
@@ -148,6 +150,57 @@ def validate_shodan_asset(asset: str, authorized: bool) -> dict[str, Any]:
 def validate_shodan_asset_request(request: ShodanAssetRequest):
     result = validate_shodan_asset(request.asset, request.authorized)
     return {**result, 'limit': request.limit, 'next_step': 'Use the Domain OSINT workflow with the shodan source to start a passive review.'}
+
+
+def _passive_shodan_review(asset: str, limit: int) -> Dict[str, Any]:
+    from theHarvester.lib.core import Core
+    api_key = Core.shodan_key()
+    if not api_key:
+        raise HTTPException(status_code=503, detail='Shodan API key is not configured in the backend environment.')
+    try:
+        parsed_ip = ipaddress.ip_address(asset)
+        addresses = [str(parsed_ip)]
+    except ValueError:
+        try:
+            addresses = sorted({item[4][0] for item in socket.getaddrinfo(asset, None, type=socket.SOCK_STREAM)})
+        except socket.gaierror as exc:
+            raise HTTPException(status_code=422, detail=f'Could not resolve the authorized domain: {exc}') from exc
+    client = Shodan(api_key)
+    assets: List[Dict[str, Any]] = []
+    for address in addresses[:min(limit, 10)]:
+        try:
+            record = client.host(address)
+            assets.append({
+                'ip': record.get('ip_str', address),
+                'hostnames': sorted(record.get('hostnames') or []),
+                'domains': sorted(record.get('domains') or []),
+                'ports': sorted(record.get('ports') or []),
+                'organization': record.get('org') or '',
+                'asn': record.get('asn') or '',
+                'isp': record.get('isp') or '',
+                'os': record.get('os') or '',
+                'last_update': record.get('last_update') or '',
+                'services': sorted({str(item.get('product') or item.get('_shodan', {}).get('module') or 'unknown') for item in record.get('data') or []}),
+            })
+        except ShodanAPIError as exc:
+            assets.append({'ip': address, 'status': 'not_indexed', 'message': str(exc)})
+        except Exception as exc:
+            assets.append({'ip': address, 'status': 'provider_error', 'message': type(exc).__name__})
+    return {
+        'asset': asset,
+        'resolved_ips': addresses,
+        'assets': assets,
+        'queried_count': len(assets),
+        'scope': 'passive Shodan metadata for an authorized asset',
+        'excluded_actions': ['service connections', 'authentication attempts', 'active port scanning', 'camera-feed access', 'exploit execution'],
+    }
+
+
+@app.post('/api/modules/shodan-assets/review')
+async def review_shodan_asset(request: ShodanAssetRequest):
+    validated = validate_shodan_asset(request.asset, request.authorized)
+    result = await asyncio.to_thread(_passive_shodan_review, validated['asset'], request.limit)
+    return {**validated, **result, 'status': 'completed'}
 
 
 @app.get('/api/health')
