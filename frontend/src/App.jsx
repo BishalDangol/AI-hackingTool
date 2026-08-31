@@ -15,21 +15,33 @@ const NAV_ITEMS = [
 
 function unique(values) { return [...new Set(values)].sort((a, b) => a.localeCompare(b)); }
 
+function extractResultLines(logs, kind) {
+  let section = null;
+  const aliases = { email: 'emails?', emails: 'emails?', host: 'hosts?', hosts: 'hosts?', ip: 'ips?|ip addresses?', ips: 'ips?|ip addresses?', url: 'urls?', urls: 'urls?', people: 'people' };
+  const heading = new RegExp(String.raw`\b(${aliases[kind]})\s+(?:found|discovered|available)\b`, 'i');
+  return logs.flatMap(raw => {
+    const line = String(raw || '').replace(/\x1b\\[[0-9;]*m/g, '').trim();
+    if (!line || line.startsWith('[CONNECTION]')) return [];
+    const match = line.match(heading);
+    if (match) { section = kind; return []; }
+    if (/^(?:\[.*?\]|read\s|={3,}|[-*]{3,}|target\s*:|searching\b|failed\s+to|error\s+message|exception\s+occurred|no\s+.+\s+found|coded\s+by\b|christian\s+martorella\b|.*edge-security\.com\b)/i.test(line)) { section = null; return []; }
+    return section === kind ? [line.replace(/^[-*•]\s*/, '').trim()] : [];
+  });
+}
+
 function extractEntities(logs) {
-  const text = logs.join('\n');
-  const emails = unique(text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []);
-  const ips = unique(text.match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g) || []);
-  const urls = unique(text.match(/https?:\/\/[^\s<>"']+/gi) || []).map(url => url.replace(/[),.;]+$/, ''));
-  const hosts = unique(text.match(/\b(?=[a-z0-9.-]{4,253}\b)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b/gi) || [])
-    .filter(host => !emails.some(email => email.endsWith(host)) && !urls.some(url => url.includes(host)));
-  const services = unique(logs.flatMap(line => {
-    const matches = line.match(/\b(?:port\s*\d{1,5}|https?|ssh|ftp|smtp|dns|rdp|mysql|postgres(?:ql)?|mongodb|redis|telnet)\b[^\n]*/gi) || [];
-    return matches.map(value => value.trim()).filter(value => value.length < 120);
-  }));
-  const people = unique(logs.flatMap(line => {
-    const match = line.match(/^(?:[-*]\s*)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*$/);
-    return match ? [match[1]] : [];
-  }));
+  const cleanLogs = logs.filter(line => !line.startsWith('[CONNECTION]'));
+  const unique = values => [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  const values = kind => extractResultLines(cleanLogs, kind).join('\n');
+  const diagnosticLines = cleanLogs.filter(line => !/^(?:\[.*?\]|read\s|searching\b|no\s+|target\s*:|failed\s+to|error\s+message|exception\s+occurred|coded\s+by\b|christian\s+martorella\b)/i.test(String(line).trim()) && !/not\s+in\s+shodan|edge-security\.com/i.test(String(line)));
+  const diagnosticText = diagnosticLines.join('\n');
+  const emails = unique((diagnosticText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [])).filter(email => !/edge-security\.com$/i.test(email));
+  const ips = unique(diagnosticText.match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g) || []);
+  const urls = unique((diagnosticText.match(/https?:\/\/[^\s<>"']+/gi) || []).map(url => url.replace(/[),.;]+$/, '')));
+  const hosts = unique(values('hosts').match(/\b(?=[a-z0-9.-]{4,253}\b)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b/gi) || [])
+    .filter(host => !/\.(?:ya?ml|txt|log)$/i.test(host));
+  const people = unique(extractResultLines(cleanLogs, 'people').filter(line => /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/.test(line)));
+  const services = unique(cleanLogs.filter(line => !/^(?:\\[.*?\\]|read\s|searching\b|no\s+|target\s*:)/i.test(String(line).trim())).flatMap(line => (String(line).match(/\b(?:port\s*\d{1,5}|https?|ssh|ftp|smtp|dns|rdp|mysql|postgres(?:ql)?|mongodb|redis|telnet)\b[^\\n]*/gi) || []).map(value => value.trim()).filter(value => value.length < 120)));
   return { emails, hosts, ips, people, urls, services };
 }
 

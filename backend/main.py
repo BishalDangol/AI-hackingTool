@@ -607,15 +607,37 @@ def _run_or_404(run_id: str) -> Dict[str, Any]:
     return run
 
 
+def _extract_result_lines(lines: List[str], kind: str) -> List[str]:
+    aliases = {'emails': r'emails?', 'hosts': r'hosts?', 'ips': r'ips?|ip addresses?', 'urls': r'urls?', 'people': r'people'}
+    heading = re.compile(rf'\b({aliases[kind]})\s+(?:found|discovered|available)\b', re.I)
+    section = None
+    values: List[str] = []
+    for raw in lines:
+        line = re.sub(r'\x1b\[[0-9;]*m', '', str(raw or '')).strip()
+        if not line or line.startswith('[CONNECTION]'):
+            continue
+        if heading.search(line):
+            section = kind
+            continue
+        if re.match(r'^(?:\[.*?\]|read\s|={3,}|[-*]{3,}|target\s*:|searching\b|failed\s+to|error\s+message|exception\s+occurred|no\s+.+\s+found|coded\s+by\b|christian\s+martorella\b|.*edge-security\.com\b)', line, re.I):
+            section = None
+            continue
+        if section == kind:
+            values.append(re.sub(r'^[-*•]\s*', '', line).strip())
+    return values
+
+
 def _extract_run_entities(lines: List[str]) -> Dict[str, List[str]]:
-    text = '\n'.join(line for line in lines if not line.startswith('[CONNECTION]'))
     unique = lambda values: sorted(set(values), key=str.casefold)
-    emails = unique(re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', text, re.I))
-    ips = unique(re.findall(r'\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b', text))
-    urls = unique([url.rstrip('),.;') for url in re.findall(r'https?://[^\s<>"\']+', text, re.I)])
-    hosts = unique(re.findall(r'\b(?=[a-z0-9.-]{4,253}\b)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b', text, re.I))
-    services = unique([match.strip() for line in lines for match in re.findall(r'\b(?:port\s*\d{1,5}|https?|ssh|ftp|smtp|dns|rdp|mysql|postgres(?:ql)?|mongodb|redis|telnet)\b[^\n]*', line, re.I) if len(match.strip()) < 120])
-    return {'emails': emails, 'hosts': hosts, 'ips': ips, 'urls': urls, 'services': services}
+    diagnostic_lines = [line for line in lines if not re.match(r'^(?:\[.*?\]|read\s|searching\b|no\s+|target\s*:|failed\s+to|error\s+message|exception\s+occurred|coded\s+by\b|christian\s+martorella\b)', str(line).strip(), re.I) and not re.search(r'not\s+in\s+shodan|edge-security\.com', str(line), re.I)]
+    emails = unique(re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', '\n'.join(diagnostic_lines), re.I))
+    emails = [email for email in emails if not re.search(r'edge-security\.com$', email, re.I)]
+    ips = unique(re.findall(r'\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b', '\n'.join(diagnostic_lines)))
+    urls = unique([url.rstrip('),.;') for url in re.findall(r'https?://[^\s<>"\']+', '\n'.join(diagnostic_lines), re.I)])
+    hosts = [host for host in unique(re.findall(r'\b(?=[a-z0-9.-]{4,253}\b)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b', '\n'.join(_extract_result_lines(lines, 'hosts')), re.I)) if not re.search(r'\.(?:ya?ml|txt|log)$', host, re.I)]
+    people = unique([line for line in _extract_result_lines(lines, 'people') if re.fullmatch(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}', line)])
+    services = unique([match.strip() for line in lines if not re.match(r'^(?:\[.*?\]|read\s|searching\b|no\s+|target\s*:)', str(line).strip(), re.I) for match in re.findall(r'\b(?:port\s*\d{1,5}|https?|ssh|ftp|smtp|dns|rdp|mysql|postgres(?:ql)?|mongodb|redis|telnet)\b[^\n]*', str(line), re.I) if len(match.strip()) < 120])
+    return {'emails': emails, 'hosts': hosts, 'ips': ips, 'urls': urls, 'people': people, 'services': services}
 
 
 def _derive_run_findings(lines: List[str]) -> List[Dict[str, str]]:
