@@ -487,13 +487,22 @@ async def start_scan(request: Request):
 
     dns_brute = bool(dns_brute)
 
-    # Construct theHarvester command as a Python list (NEVER a shell string)
-    theharvester_bin = shutil.which("theHarvester") or shutil.which("theHarvester.exe") or shutil.which("theHarvester.py")
-    if theharvester_bin:
-        cmd = [theharvester_bin]
+    # Construct theHarvester command as a Python list (NEVER a shell string).
+    # THEHARVESTER_COMMAND is an optional local-lab executable/script override;
+    # it is treated as one filesystem path and is never parsed by a shell.
+    configured_command = os.getenv('THEHARVESTER_COMMAND', '').strip()
+    if configured_command:
+        configured_path = os.path.abspath(os.path.expanduser(configured_command))
+        if not os.path.isfile(configured_path):
+            raise HTTPException(status_code=500, detail='THEHARVESTER_COMMAND does not point to an existing local file.')
+        cmd = [sys.executable, configured_path] if configured_path.lower().endswith('.py') else [configured_path]
     else:
-        # Fallback to current python interpreter running `-m theHarvester`
-        cmd = [sys.executable, "-m", "theHarvester"]
+        theharvester_bin = shutil.which("theHarvester") or shutil.which("theHarvester.exe") or shutil.which("theHarvester.py")
+        if theharvester_bin:
+            cmd = [theharvester_bin]
+        else:
+            # Fallback to current python interpreter running `-m theHarvester`
+            cmd = [sys.executable, "-m", "theHarvester"]
 
     cmd.extend(["-d", domain])
 
