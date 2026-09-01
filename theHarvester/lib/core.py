@@ -220,7 +220,7 @@ class Core:
     @staticmethod
     def shodan_key() -> str:
         # Prefer an environment variable so deployments do not need to mount secrets.
-        return os.getenv('SHODAN_API_KEY', '').strip() or Core._api_key_value('shodan')
+        return os.getenv('fXalb4NXJtQ83RYBsKd2Tifd9kEtoknC', '').strip() or Core._api_key_value('shodan')
 
     @staticmethod
     def tomba_key() -> tuple[str, str]:

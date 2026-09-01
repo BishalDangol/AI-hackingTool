@@ -229,8 +229,8 @@ def diagnostics():
     return {
         'python': sys.version.split()[0],
         'theharvester_executable': shutil.which('theHarvester') or shutil.which('theHarvester.exe') or shutil.which('theHarvester.py'),
-        'shodan_key_configured': bool(os.getenv('SHODAN_API_KEY', '').strip()) or yaml_configured,
-        'shodan_key_source': 'environment' if os.getenv('SHODAN_API_KEY', '').strip() else ('yaml' if yaml_configured else None),
+        'shodan_key_configured': bool(os.getenv('fXalb4NXJtQ83RYBsKd2Tifd9kEtoknC', '').strip()) or yaml_configured,
+        'shodan_key_source': 'environment' if os.getenv('fXalb4NXJtQ83RYBsKd2Tifd9kEtoknC', '').strip() else ('yaml' if yaml_configured else None),
         'safe_scope': 'passive metadata for authorized assets only',
     }
 
