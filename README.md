@@ -443,3 +443,17 @@ python -m pytest -q
 ```
 
 If PowerShell blocks script activation, run `Set-ExecutionPolicy -Scope Process Bypass` only for the current PowerShell process, then activate `.venv` again. Do not paste the value of `$env:SHODAN_API_KEY` into screenshots, logs, issues, or reports.
+
+
+## Windows one-click local launcher
+
+For a normal local startup, double-click `run_windows.bat` from the application folder. It creates `.venv` when needed, installs backend dependencies, installs frontend dependencies when needed, and opens separate command windows for FastAPI and Vite. The launcher uses an already-defined `SHODAN_API_KEY` environment variable or the local theHarvester YAML fallback; it does not contain an API key.
+
+To configure Shodan for the current Command Prompt session before launching:
+
+```bat
+set SHODAN_API_KEY=your-new-local-key
+run_windows.bat
+```
+
+Then open `http://localhost:5173`. The backend health endpoint is `http://127.0.0.1:8000/api/health`. Close the two command windows to stop the application. Use only authorized targets; for local fixture testing, configure `THEHARVESTER_COMMAND` to the synthetic replay script rather than querying live providers.
