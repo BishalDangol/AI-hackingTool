@@ -1,6 +1,6 @@
 ## Documentation
 
-The complete operator and user guide is available at [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md). It covers Windows/Git Bash setup, normal backend and frontend startup, module usage, scan lifecycle, results, API endpoints, troubleshooting, and bug-report capture.
+The complete operator and user guide is available at [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md). It covers Windows/Git Bash setup, normal backend and frontend startup, module usage, scan lifecycle, results, API endpoints, troubleshooting, and bug-report capture. The complete APA 7 final-year project report is available at [`docs/FYP_REPORT_APA7.md`](docs/FYP_REPORT_APA7.md).
 
 ## How to Run the Project
 
