@@ -14,7 +14,7 @@
 
 ## Declaration
 
-I declare that this project report is my original academic work, except where sources and software dependencies have been acknowledged. The implementation described in this report is intended for lawful, authorized, and defensive security assessment. It does not provide unrestricted exploitation, credential attacks, persistence, or access to third-party camera feeds.
+I declare that this project report is my original academic work, except where sources, software dependencies, and external references have been acknowledged. The implementation described in this report is intended for lawful, authorized, and defensive security assessment. It does not provide unrestricted exploitation, credential attacks, persistence, or access to third-party camera feeds.
 
 **Signature:** ____________________  
 **Date:** ____________________
@@ -186,12 +186,12 @@ The primary stakeholder is a student or authorized security operator who needs t
 
 | Category | Requirement |
 |---|---|
-| Security | Inputs must be validated, sources whitelisted, commands executed without shell interpolation, and secrets excluded from responses and commits. |
+| Security | Inputs must be validated, sources whitelisted, commands executed without shell interpolation, and secrets excluded from responses, reports, and logs. |
 | Privacy | The system must minimize collected information and restrict use to authorized targets. |
 | Reliability | Long-running scans must not become false errors because a two-minute polling window expired. |
 | Usability | The interface must provide clear setup, status, evidence, findings, and remediation information. |
 | Maintainability | Backend results should use structured schemas and focused endpoints. |
-| Portability | The project should run in a Windows Python virtual environment and Git Bash workflow. |
+| Portability | The project should run in a Windows Python virtual environment and Windows terminal workflow. |
 | Testability | A deterministic local lab should produce repeatable expected values. |
 | Performance | The interface should remain responsive while a background process runs. |
 
@@ -415,13 +415,13 @@ npm run dev
 
 ## 6.2 Credential Handling
 
-The Shodan credential is configured locally through the `SHODAN_API_KEY` environment variable or through theHarvester’s local YAML fallback. The preferred Windows/Git Bash configuration is:
+The Shodan credential is configured locally through the `SHODAN_API_KEY` environment variable or through theHarvester’s local YAML fallback. The preferred Windows terminal configuration is:
 
 ```bash
 export SHODAN_API_KEY='replacement-key-configured-locally'
 ```
 
-The key is not returned by diagnostics, printed in reports, committed to Git, or included in bug reports. Any key pasted into a public conversation or repository should be revoked and replaced.
+The key is not returned by diagnostics, printed in reports, or included in bug reports. Any exposed key should be revoked and replaced.
 
 ## 6.3 theHarvester Integration
 
@@ -466,7 +466,7 @@ The interface includes a note that indexed data is an observation from a third-p
 
 ## 6.8 Local Synthetic Laboratory
 
-The separate `SandboxVernuableEnv` repository contains a Python-only local lab. Its replay script accepts `lab.test` and emits synthetic values:
+A separate Python-only local laboratory environment was created for this project. Its replay script accepts `lab.test` and emits synthetic values:
 
 ```text
 security@lab.test
@@ -539,7 +539,7 @@ The revised parser excluded these values from target evidence. It also respected
 | WebSocket failure handling | REST fallback implemented. |
 | Entity accuracy | Section-aware and diagnostic-aware parser implemented. |
 | Reporting | Run, evidence, findings, summary, and report routes implemented. |
-| Windows operation | Git Bash and virtual-environment workflow documented. |
+| Windows operation | Virtual-environment workflow documented. |
 | Safe testing | Separate Python replay and localhost mock service implemented. |
 | UI usability | Modular workspace, evidence panels, charts, findings, and in-app documentation implemented. |
 
@@ -575,7 +575,7 @@ Findings should be communicated privately to the asset owner or approved supervi
 
 ## 8.5 Secret Management
 
-API keys must be provided through environment variables or an ignored local configuration file. They must not be placed in Git commits, screenshots, bug reports, public documentation, or chat. If a key is exposed, it should be revoked and replaced immediately.
+API keys must be provided through environment variables or an ignored local configuration file. They must not be placed in configuration files, screenshots, bug reports, public documentation, or chat. If a key is exposed, it should be revoked and replaced immediately.
 
 ---
 
@@ -621,9 +621,9 @@ Shodan. (n.d.). *REST API documentation*. https://developer.shodan.io/api
 
 # Appendices
 
-## Appendix A: Normal Windows/Git Bash Startup
+## Appendix A: Normal Windows Terminal Startup
 
-From Git Bash:
+From a Windows terminal:
 
 ```bash
 cd /e/path/to/AI-hackingTool
@@ -647,11 +647,10 @@ Open `http://localhost:5173`.
 
 ## Appendix B: Running the Synthetic Lab
 
-Clone the separate lab repository:
+Open the separate laboratory folder and start its synthetic service:
 
 ```bash
-git clone https://github.com/BisalDangol/SandboxVernuableEnv.git
-cd SandboxVernuableEnv
+cd /path/to/SandboxVernuableEnv
 python mock_lab_server.py
 ```
 
@@ -708,4 +707,4 @@ Do not attach API keys, populated secret files, private credentials, or unauthor
 
 ## Appendix E: Submission Customization Checklist
 
-Before submitting the report, replace the placeholders on the title page, verify the institution’s required formatting, add supervisor-approved screenshots or diagrams, confirm the final test count from the local repository, and ensure that all claims about live targets are supported by authorized evidence. APA 7 formatting requirements may differ slightly by institution, so the department’s official template should take precedence for margins, page numbering, headings, title-page layout, and appendices.
+Before submitting the report, replace the placeholders on the title page, verify the institution’s required formatting, add supervisor-approved screenshots or diagrams, confirm the final test count from the project test environment, and ensure that all claims about live targets are supported by authorized evidence. APA 7 formatting requirements may differ slightly by institution, so the department’s official template should take precedence for margins, page numbering, headings, title-page layout, and appendices.
